@@ -2,12 +2,13 @@ from flask import Flask, jsonify
 import os
 
 from extensions import db
+import models
+
 from routes.caterer_routes import caterer_bp
 from routes.menu_routes import menu_bp
 from routes.package_routes import package_bp
 from routes.booking_routes import booking_bp
 
-import models
 
 def create_app(test_config=None):
     app = Flask(__name__)
@@ -17,9 +18,11 @@ def create_app(test_config=None):
     app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///sokocater.db"
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
+    # Allow test settings to override the default configuration
     if test_config:
         app.config.update(test_config)
 
+    # Initialize SQLAlchemy
     db.init_app(app)
 
     # Register all route blueprints
@@ -39,6 +42,7 @@ def create_app(test_config=None):
 
 
 app = create_app()
+
 
 if __name__ == "__main__":
     app.run(debug=True)
