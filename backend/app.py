@@ -1,12 +1,16 @@
-
 from flask import Flask, jsonify
 import os
 
 from extensions import db
+import models
+
+from routes.caterer_routes import caterer_bp
+from routes.menu_routes import menu_bp
+from routes.package_routes import package_bp
+from routes.booking_routes import booking_bp
 
 
 def create_app(test_config=None):
-
     app = Flask(__name__)
 
     os.makedirs(app.instance_path, exist_ok=True)
@@ -21,8 +25,11 @@ def create_app(test_config=None):
     # Initialize SQLAlchemy
     db.init_app(app)
 
-    # Import models so SQLAlchemy knows about all database tables
-    import models
+    # Register all route blueprints
+    app.register_blueprint(caterer_bp)
+    app.register_blueprint(menu_bp)
+    app.register_blueprint(package_bp)
+    app.register_blueprint(booking_bp)
 
     @app.route("/api/health", methods=["GET"])
     def health():
