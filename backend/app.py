@@ -1,10 +1,15 @@
-from flask import Flask, jsonify 
-from flask_sqlalchemy import SQLAlchemy
+from flask import Flask, jsonify
 import os
 
-db = SQLAlchemy()
+from extensions import db
+from routes.caterer_routes import caterer_bp
+from routes.menu_routes import menu_bp
+from routes.package_routes import package_bp
+from routes.booking_routes import booking_bp
 
-def create_app():
+import models
+
+def create_app(test_config=None):
     app = Flask(__name__)
 
     os.makedirs(app.instance_path, exist_ok=True)
@@ -12,7 +17,16 @@ def create_app():
     app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///sokocater.db"
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
+    if test_config:
+        app.config.update(test_config)
+
     db.init_app(app)
+
+    # Register all route blueprints
+    app.register_blueprint(caterer_bp)
+    app.register_blueprint(menu_bp)
+    app.register_blueprint(package_bp)
+    app.register_blueprint(booking_bp)
 
     @app.route("/api/health", methods=["GET"])
     def health():
@@ -22,6 +36,7 @@ def create_app():
         }), 200
 
     return app
+
 
 app = create_app()
 
