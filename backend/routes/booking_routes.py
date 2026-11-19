@@ -55,6 +55,9 @@ def create_booking():
         if not customer:
             return jsonify({"error": "Customer not found"}), 404
 
+        if customer.role != "customer":
+             return jsonify({"error": "User must have a customer role"}), 400
+
         if not caterer:
             return jsonify({"error": "Caterer not found"}), 404
 
@@ -77,7 +80,7 @@ def create_booking():
 
 
 # UPDATE a booking
-@booking_bp.route("/api/bookings/<int:booking_id>", methods=["PATCH"])
+@booking_bp.route("/api/bookings/<int:booking_id>", methods=["PUT"])
 def update_booking(booking_id):
     booking = db.session.get(Booking, booking_id)
 
@@ -101,6 +104,9 @@ def update_booking(booking_id):
 
             if not customer:
                 return jsonify({"error": "Customer not found"}), 404
+
+            if customer.role != "customer":
+                return jsonify({"error": "User must have a customer role"}), 400
 
         if "caterer_id" in validated_data:
             caterer = db.session.get(

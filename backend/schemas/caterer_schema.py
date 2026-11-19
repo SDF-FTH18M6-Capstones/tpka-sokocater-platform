@@ -19,11 +19,12 @@ class CatererSchema(Schema):
 
     location = fields.String(
         required=True,
-        validate=validate.Length(min=2, max=255)
+        validate=validate.Length(min=2, max=150)
     )
 
     contact_number = fields.String(
-        required=True,
+        required=False,
+        allow_none=True,
         validate=validate.Length(min=7, max=20)
     )
 

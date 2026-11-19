@@ -22,7 +22,7 @@ class PackageSchema(Schema):
     # Package name
     package_name = fields.String(
         required=True,
-        validate=validate.Length(min=2, max=150)
+        validate=validate.Length(min=2, max=100)
     )
 
     # Optional description
@@ -32,7 +32,7 @@ class PackageSchema(Schema):
     price_per_guest = fields.Decimal(
         required=True,
         as_string=True,
-        validate=validate.Range(min=0.01)
+        validate=validate.Range(min=0)
     )
 
     # Minimum number of guests

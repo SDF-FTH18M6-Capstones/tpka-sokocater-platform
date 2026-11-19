@@ -67,7 +67,7 @@ def create_package():
         return jsonify({"error": "Unable to create package"}), 409
 
 
-@package_bp.route("/api/packages/<int:package_id>", methods=["PATCH"])
+@package_bp.route("/api/packages/<int:package_id>", methods=["PUT"])
 def update_package(package_id):
     package = db.session.get(Package, package_id)
 
@@ -82,11 +82,10 @@ def update_package(package_id):
     try:
         validated_data = package_schema.load(data, partial=True)
 
-        caterer_id = validated_data.get(
-            "caterer_id", package.caterer_id
-        )
-
-        caterer = db.session.get(CatererProfile, caterer_id)
+        if "caterer_id" in validated_data:
+            caterer = db.session.get(
+                CatererProfile, validated_data["caterer_id"]
+            )
 
         if not caterer:
             return jsonify({"error": "Caterer not found"}), 404

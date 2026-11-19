@@ -16,7 +16,7 @@ class MenuSchema(Schema):
     # Name of the menu
     menu_name = fields.String(
         required=True,
-        validate=validate.Length(min=2, max=150)
+        validate=validate.Length(min=2, max=100)
     )
 
     # Optional menu description

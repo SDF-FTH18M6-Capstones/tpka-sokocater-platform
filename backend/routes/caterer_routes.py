@@ -46,6 +46,9 @@ def create_caterer():
         if not user:
             return jsonify({"error": "User not found"}), 404
 
+        if user.role != "caterer":
+            return jsonify({"error": "User must have a caterer role"}), 400
+
         caterer = CatererProfile(
             **validated_data,
             verification_status="pending"
@@ -69,7 +72,7 @@ def create_caterer():
         }), 409
 
 
-@caterer_bp.route("/api/caterers/<int:caterer_id>", methods=["PATCH"])
+@caterer_bp.route("/api/caterers/<int:caterer_id>", methods=["PUT"])
 def update_caterer(caterer_id):
     caterer = db.session.get(CatererProfile, caterer_id)
 
