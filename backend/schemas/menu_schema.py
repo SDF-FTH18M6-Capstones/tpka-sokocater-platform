@@ -13,7 +13,7 @@ class MenuSchema(Schema):
 
     name = fields.String(
         required=True,
-        validate=validate.Length(min=2, max=150)
+        validate=validate.Length(min=2, max=100)
     )
 
     description = fields.String(allow_none=True)

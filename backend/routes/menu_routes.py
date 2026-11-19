@@ -65,7 +65,7 @@ def create_menu():
         return jsonify({"error": "Unable to create menu"}), 409
 
 
-@menu_bp.route("/api/menus/<int:menu_id>", methods=["PATCH"])
+@menu_bp.route("/api/menus/<int:menu_id>", methods=["PUT"])
 def update_menu(menu_id):
     menu = db.session.get(Menu, menu_id)
 

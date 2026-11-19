@@ -12,3 +12,7 @@ instance/
 # Virtual environments
 .venv/
 venv/
+backend/.venv/
+backend/venv/
+__pycache__/
+*.pyc
