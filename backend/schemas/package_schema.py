@@ -1,31 +1,34 @@
-
-from marshmallow import (
-    Schema,
-    fields,
-    validate,
-    validates_schema,
-    ValidationError
-)
-
+from marshmallow import Schema, fields, validate, validates_schema, ValidationError
 
 class PackageSchema(Schema):
 
-    # Automatically generated package ID
+    # Automatically generated primary key
     id = fields.Integer(dump_only=True)
 
-    # Caterer who owns the package
+    # Foreign key referencing the caterer who owns the package
     caterer_id = fields.Integer(
         required=True,
         validate=validate.Range(min=1)
     )
 
     # Package name
-    package_name = fields.String(
+    name = fields.String(
         required=True,
         validate=validate.Length(min=2, max=100)
     )
 
-    # Optional description
+    # Package category: only the four approved options
+    category = fields.String(
+        required=True,
+        validate=validate.OneOf([
+            "Food Catering",
+            "Wedding Catering",
+            "Corporate Events",
+            "Private Parties"
+        ])
+    )
+
+    # Optional package description
     description = fields.String(allow_none=True)
 
     # Price charged per guest
@@ -46,6 +49,9 @@ class PackageSchema(Schema):
         allow_none=True,
         validate=validate.Range(min=1)
     )
+
+    # Automatically generated timestamp
+    created_at = fields.DateTime(dump_only=True)
 
     # Ensure maximum guests is not less than minimum guests
     @validates_schema
