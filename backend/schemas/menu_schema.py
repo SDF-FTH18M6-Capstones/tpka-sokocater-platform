@@ -1,4 +1,3 @@
-
 from marshmallow import Schema, fields, validate
 
 
@@ -11,17 +10,11 @@ class MenuSchema(Schema):
         validate=validate.Range(min=1)
     )
 
-    name = fields.String(
+    menu_name = fields.String(
         required=True,
         validate=validate.Length(min=2, max=100)
     )
 
     description = fields.String(allow_none=True)
-
-    price = fields.Decimal(
-        required=True,
-        as_string=True,
-        validate=validate.Range(min=0)
-    )
 
     created_at = fields.DateTime(dump_only=True)

@@ -1,9 +1,15 @@
 
 from flask_sqlalchemy import SQLAlchemy
+from flask_jwt_extended import JWTManager
 from sqlalchemy import event
 from sqlalchemy.engine import Engine
 
+
+# Database extension
 db = SQLAlchemy()
+
+# JWT authentication extension
+jwt = JWTManager()
 
 
 # Enable foreign-key enforcement for SQLite databases
