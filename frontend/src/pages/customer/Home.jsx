@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 
 const categories = [
   {
@@ -35,12 +36,12 @@ function Home() {
           </p>
 
           <div className="hero-actions">
-            <a href="#categories" className="primary-button">
+            <Link to="/caterers" className="primary-button">
               Explore Catering
-            </a>
-            <a href="/caterer/dashboard" className="secondary-button">
+            </Link>
+            <Link to="/signup" className="secondary-button">
               Become a Caterer
-            </a>
+            </Link>
           </div>
         </div>
       </section>
@@ -58,7 +59,7 @@ function Home() {
               <span className="category-icon">{category.icon}</span>
               <h3>{category.name}</h3>
               <p>{category.description}</p>
-              <a href="#about">Explore services →</a>
+              <Link to="/caterers">Explore services →</Link>
             </article>
           ))}
         </div>
