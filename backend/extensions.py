@@ -1,10 +1,13 @@
+from flask_bcrypt import Bcrypt
+from flask_jwt_extended import JWTManager
 
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import event
 from sqlalchemy.engine import Engine
 
 db = SQLAlchemy()
-
+bcrypt = Bcrypt()
+jwt = JWTManager()
 
 # Enable foreign-key enforcement for SQLite databases
 @event.listens_for(Engine, "connect")

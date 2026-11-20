@@ -1,14 +1,14 @@
 from flask import Flask, jsonify
 import os
 
-from extensions import db
+from extensions import db, bcrypt, jwt
 import models
 
 from routes.caterer_routes import caterer_bp
 from routes.menu_routes import menu_bp
 from routes.package_routes import package_bp
 from routes.booking_routes import booking_bp
-
+from routes.auth_routes import auth_bp
 
 def create_app(test_config=None):
     app = Flask(__name__)
@@ -17,19 +17,24 @@ def create_app(test_config=None):
 
     app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///sokocater.db"
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+    app.config["JWT_SECRET_KEY"] = os.environ.get("JWT_SECRET_KEY", "dev-secret-change-me")
 
     # Allow test settings to override the default configuration
     if test_config:
         app.config.update(test_config)
 
     # Initialize SQLAlchemy
+    # Initialize extensions
     db.init_app(app)
+    bcrypt.init_app(app)
+    jwt.init_app(app)
 
     # Register all route blueprints
     app.register_blueprint(caterer_bp)
     app.register_blueprint(menu_bp)
     app.register_blueprint(package_bp)
     app.register_blueprint(booking_bp)
+    app.register_blueprint(auth_bp)
 
     @app.route("/api/health", methods=["GET"])
     def health():
