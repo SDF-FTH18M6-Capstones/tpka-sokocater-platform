@@ -1,84 +1,97 @@
-from flask import Blueprint, request, jsonify
+
+from flask import Blueprint, jsonify, request
 from flask_jwt_extended import create_access_token
+from marshmallow import ValidationError
+from werkzeug.security import generate_password_hash, check_password_hash
 
-from extensions import db, bcrypt
+from extensions import db
 from models import User
+from schemas.auth_schema import RegisterSchema, LoginSchema
 
-auth_bp = Blueprint("auth", __name__, url_prefix="/api/auth")
+
+auth_bp = Blueprint("auth", __name__)
+
+register_schema = RegisterSchema()
+login_schema = LoginSchema()
 
 
-# REGISTER
-@auth_bp.route("/register", methods=["POST"])
+@auth_bp.route("/api/auth/register", methods=["POST"])
 def register():
-    data = request.get_json() or {}
+    data = request.get_json(silent=True)
 
-    name = data.get("name", "").strip()
-    email = data.get("email", "").strip().lower()
-    password = data.get("password", "")
-    role = data.get("role", "customer")
+    if not isinstance(data, dict):
+        return jsonify({"error": "Invalid JSON body"}), 400
 
-    if not name or not email or not password:
-        return jsonify({"message": "Name, email and password are required"}), 400
+    try:
+        validated_data = register_schema.load(data)
 
-    if role not in ["customer", "caterer"]:
-        return jsonify({"message": "Invalid role"}), 400
+        email = validated_data["email"].lower()
 
-    if len(password) < 8:
-        return jsonify({"message": "Password must be at least 8 characters"}), 400
+        existing_user = User.query.filter_by(email=email).first()
 
-    existing_user = User.query.filter_by(email=email).first()
+        if existing_user:
+            return jsonify({"error": "Email already registered"}), 409
 
-    if existing_user:
-        return jsonify({"message": "Email is already registered"}), 409
+        user = User(
+            full_name=validated_data["full_name"],
+            email=email,
+            password_hash=generate_password_hash(validated_data["password"]),
+            phone_number=validated_data.get("phone_number"),
+            role=validated_data["role"]
+        )
 
-    password_hash = bcrypt.generate_password_hash(password).decode("utf-8")
+        db.session.add(user)
+        db.session.commit()
 
-    new_user = User(
-        full_name=name,
-        email=email,
-        password_hash=password_hash,
-        role=role
-    )
+        return jsonify({
+            "message": "User registered successfully",
+            "user": {
+                "id": user.id,
+                "full_name": user.full_name,
+                "email": user.email,
+                "phone_number": user.phone_number,
+                "role": user.role
+            }
+        }), 201
 
-    db.session.add(new_user)
-    db.session.commit()
-
-    return jsonify({
-        "message": "Registration successful",
-        "user": {
-            "id": new_user.id,
-            "name": new_user.full_name,
-            "email": new_user.email,
-            "role": new_user.role
-        }
-    }), 201
+    except ValidationError as error:
+        return jsonify({"error": error.messages}), 400
 
 
-# LOGIN
-@auth_bp.route("/login", methods=["POST"])
+@auth_bp.route("/api/auth/login", methods=["POST"])
 def login():
-    data = request.get_json() or {}
+    data = request.get_json(silent=True)
 
-    email = data.get("email", "").strip().lower()
-    password = data.get("password", "")
+    if not isinstance(data, dict):
+        return jsonify({"error": "Invalid JSON body"}), 400
 
-    if not email or not password:
-        return jsonify({"message": "Email and password are required"}), 400
+    try:
+        validated_data = login_schema.load(data)
 
-    user = User.query.filter_by(email=email).first()
+        email = validated_data["email"].lower()
+        password = validated_data["password"]
 
-    if not user or not bcrypt.check_password_hash(user.password_hash, password):
-        return jsonify({"message": "Invalid email or password"}), 401
+        user = User.query.filter_by(email=email).first()
 
-    access_token = create_access_token(identity=str(user.id))
+        if not user or not check_password_hash(user.password_hash, password):
+            return jsonify({"error": "Invalid email or password"}), 401
 
-    return jsonify({
-        "message": "Login successful",
-        "access_token": access_token,
-        "user": {
-            "id": user.id,
-            "name": user.full_name,
-            "email": user.email,
-            "role": user.role
-        }
-    }), 200
+        access_token = create_access_token(
+            identity=str(user.id),
+            additional_claims={"role": user.role}
+        )
+
+        return jsonify({
+            "message": "Login successful",
+            "access_token": access_token,
+            "user": {
+                "id": user.id,
+                "full_name": user.full_name,
+                "email": user.email,
+                "phone_number": user.phone_number,
+                "role": user.role
+            }
+        }), 200
+
+    except ValidationError as error:
+        return jsonify({"error": error.messages}), 400

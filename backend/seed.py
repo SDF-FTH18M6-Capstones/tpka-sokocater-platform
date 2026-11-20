@@ -1,5 +1,5 @@
 
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 
 from werkzeug.security import generate_password_hash
@@ -294,7 +294,7 @@ def seed_orders(users, caterers, menus):
             "unit_price": Decimal("1500.00"),
             "total_amount": Decimal("3000.00"),
             "status": "pending",
-            "order_date": datetime.utcnow()
+            "order_date": datetime.now(UTC)
         }
     )
 
@@ -310,7 +310,7 @@ def seed_orders(users, caterers, menus):
             "unit_price": Decimal("1200.00"),
             "total_amount": Decimal("3600.00"),
             "status": "pending",
-            "order_date": datetime.utcnow()
+            "order_date": datetime.now(UTC)
         }
     )
 

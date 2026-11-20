@@ -17,7 +17,6 @@ sqlalchemy = "==2.0.57"
 typing-extensions = "==4.16.0"
 werkzeug = "==3.1.9"
 marshmallow = "*"
-flask-bcrypt = "*"
 flask-jwt-extended = "*"
 
 [dev-packages]
