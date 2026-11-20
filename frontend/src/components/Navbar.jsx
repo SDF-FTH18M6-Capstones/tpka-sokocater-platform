@@ -1,4 +1,3 @@
-
 import { Link, NavLink } from "react-router-dom";
 
 function Navbar() {
@@ -10,6 +9,7 @@ function Navbar() {
 
       <div className="nav-links">
         <NavLink to="/">Home</NavLink>
+        <NavLink to="/caterers">Find Catering</NavLink>
         <a href="/#categories">Categories</a>
         <a href="/#about">About</a>
       </div>
@@ -18,8 +18,11 @@ function Navbar() {
         <Link to="/caterer/dashboard" className="provider-link">
           Caterer Portal
         </Link>
-        <Link to="/" className="nav-button">
-          Find Catering
+        <Link to="/login" className="nav-button">
+          Login
+        </Link>
+        <Link to="/signup" className="nav-button">
+          Sign Up
         </Link>
       </div>
     </nav>
