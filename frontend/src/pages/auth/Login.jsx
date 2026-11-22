@@ -1,11 +1,15 @@
-
 import { useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { useAuth } from "../../context/AuthContext";
 
 function Login() {
   const [formData, setFormData] = useState({
     email: "",
     password: "",
   });
+
+  const { login, loading, error } = useAuth();
+  const navigate = useNavigate();
 
   const handleChange = (e) => {
     setFormData({
@@ -14,16 +18,27 @@ function Login() {
     });
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
 
-    console.log("Login details:", formData);
-    alert("Login form submitted!");
+    try {
+      const user = await login(formData.email, formData.password);
+
+      if (user.role === "caterer") {
+        navigate("/caterer/dashboard");
+      } else {
+        navigate("/");
+      }
+    } catch {
+      // The error is displayed below the form.
+    }
   };
 
   return (
     <div className="auth-container">
       <h2>Welcome Back to SokoCater</h2>
+
+      {error && <p role="alert">{error}</p>}
 
       <form onSubmit={handleSubmit}>
         <input
@@ -44,8 +59,14 @@ function Login() {
           required
         />
 
-        <button type="submit">Login</button>
+        <button type="submit" disabled={loading}>
+          {loading ? "Logging in..." : "Login"}
+        </button>
       </form>
+
+      <p>
+        Don't have an account? <Link to="/signup">Sign up</Link>
+      </p>
     </div>
   );
 }
