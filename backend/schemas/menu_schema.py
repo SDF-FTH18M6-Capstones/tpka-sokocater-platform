@@ -1,4 +1,4 @@
-from marshmallow import Schema, fields, validate
+from marshmallow import Schema, fields, validate, validates, ValidationError
 
 
 class MenuSchema(Schema):
@@ -18,3 +18,10 @@ class MenuSchema(Schema):
     description = fields.String(allow_none=True)
 
     created_at = fields.DateTime(dump_only=True)
+
+    @validates("menu_name")
+    def validate_menu_name(self, value, **kwargs):
+        if not value.strip():
+            raise ValidationError(
+                "Menu name cannot contain only spaces."
+            )

@@ -15,14 +15,18 @@ caterer_schema = CatererSchema()
 caterers_schema = CatererSchema(many=True)
 
 
-# ============================================================
-# GET ALL CATERERS
-# PUBLIC
-# ============================================================
+def get_current_user_id():
+    identity = get_jwt_identity()
+
+    try:
+        return int(identity)
+    except (TypeError, ValueError):
+        return None
+
 
 @caterer_bp.route("/api/caterers", methods=["GET"])
 def get_caterers():
-
+    # Pending and verified profiles are both publicly visible.
     caterers = Caterer.query.all()
 
     return jsonify({
@@ -31,37 +35,26 @@ def get_caterers():
     }), 200
 
 
-# ============================================================
-# GET ONE CATERER
-# PUBLIC
-# ============================================================
-
 @caterer_bp.route("/api/caterers/<int:caterer_id>", methods=["GET"])
 def get_caterer(caterer_id):
-
     caterer = db.session.get(Caterer, caterer_id)
 
     if not caterer:
-        return jsonify({
-            "error": "Caterer not found"
-        }), 404
+        return jsonify({"error": "Caterer not found"}), 404
 
     return jsonify({
         "data": caterer_schema.dump(caterer)
     }), 200
 
 
-# ============================================================
-# CREATE CATERER PROFILE
-# CATERER ONLY
-# ============================================================
-
 @caterer_bp.route("/api/caterers", methods=["POST"])
 @jwt_required()
 def create_caterer():
-
-    current_user_id = int(get_jwt_identity())
+    current_user_id = get_current_user_id()
     current_role = get_jwt().get("role")
+
+    if current_user_id is None:
+        return jsonify({"error": "Invalid user identity"}), 401
 
     if current_role != "caterer":
         return jsonify({
@@ -71,9 +64,7 @@ def create_caterer():
     data = request.get_json(silent=True)
 
     if not isinstance(data, dict):
-        return jsonify({
-            "error": "Invalid JSON body"
-        }), 400
+        return jsonify({"error": "Invalid JSON body"}), 400
 
     try:
         validated_data = caterer_schema.load(data)
@@ -86,9 +77,7 @@ def create_caterer():
         user = db.session.get(User, current_user_id)
 
         if not user:
-            return jsonify({
-                "error": "User not found"
-            }), 404
+            return jsonify({"error": "User not found"}), 404
 
         if user.role != "caterer":
             return jsonify({
@@ -104,8 +93,6 @@ def create_caterer():
                 "error": "You already have a caterer profile"
             }), 409
 
-        # New profiles must start with pending verification.
-        # The client cannot choose its own verification status.
         caterer = Caterer(
             **validated_data,
             verification_status="pending"
@@ -120,9 +107,7 @@ def create_caterer():
         }), 201
 
     except ValidationError as error:
-        return jsonify({
-            "error": error.messages
-        }), 400
+        return jsonify({"error": error.messages}), 400
 
     except IntegrityError:
         db.session.rollback()
@@ -132,17 +117,14 @@ def create_caterer():
         }), 409
 
 
-# ============================================================
-# UPDATE CATERER PROFILE
-# CATERER ONLY - OWN PROFILE
-# ============================================================
-
 @caterer_bp.route("/api/caterers/<int:caterer_id>", methods=["PUT"])
 @jwt_required()
 def update_caterer(caterer_id):
-
-    current_user_id = int(get_jwt_identity())
+    current_user_id = get_current_user_id()
     current_role = get_jwt().get("role")
+
+    if current_user_id is None:
+        return jsonify({"error": "Invalid user identity"}), 401
 
     if current_role != "caterer":
         return jsonify({
@@ -152,9 +134,7 @@ def update_caterer(caterer_id):
     caterer = db.session.get(Caterer, caterer_id)
 
     if not caterer:
-        return jsonify({
-            "error": "Caterer not found"
-        }), 404
+        return jsonify({"error": "Caterer not found"}), 404
 
     if caterer.user_id != current_user_id:
         return jsonify({
@@ -164,16 +144,19 @@ def update_caterer(caterer_id):
     data = request.get_json(silent=True)
 
     if not isinstance(data, dict):
+        return jsonify({"error": "Invalid JSON body"}), 400
+
+    if not data:
         return jsonify({
-            "error": "Invalid JSON body"
+            "error": "No update data provided"
         }), 400
 
-    try:
-        if "user_id" in data:
-            return jsonify({
-                "error": "You cannot change profile ownership"
-            }), 403
+    if "user_id" in data:
+        return jsonify({
+            "error": "You cannot change profile ownership"
+        }), 403
 
+    try:
         validated_data = caterer_schema.load(
             data,
             partial=True
@@ -190,9 +173,7 @@ def update_caterer(caterer_id):
         }), 200
 
     except ValidationError as error:
-        return jsonify({
-            "error": error.messages
-        }), 400
+        return jsonify({"error": error.messages}), 400
 
     except IntegrityError:
         db.session.rollback()
@@ -202,17 +183,14 @@ def update_caterer(caterer_id):
         }), 409
 
 
-# ============================================================
-# DELETE CATERER PROFILE
-# CATERER ONLY - OWN PROFILE
-# ============================================================
-
 @caterer_bp.route("/api/caterers/<int:caterer_id>", methods=["DELETE"])
 @jwt_required()
 def delete_caterer(caterer_id):
-
-    current_user_id = int(get_jwt_identity())
+    current_user_id = get_current_user_id()
     current_role = get_jwt().get("role")
+
+    if current_user_id is None:
+        return jsonify({"error": "Invalid user identity"}), 401
 
     if current_role != "caterer":
         return jsonify({
@@ -222,9 +200,7 @@ def delete_caterer(caterer_id):
     caterer = db.session.get(Caterer, caterer_id)
 
     if not caterer:
-        return jsonify({
-            "error": "Caterer not found"
-        }), 404
+        return jsonify({"error": "Caterer not found"}), 404
 
     if caterer.user_id != current_user_id:
         return jsonify({

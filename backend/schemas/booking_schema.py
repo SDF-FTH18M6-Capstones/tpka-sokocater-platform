@@ -1,4 +1,7 @@
-from marshmallow import Schema, fields, validate
+
+from datetime import date
+
+from marshmallow import Schema, fields, validate, validates, ValidationError
 
 
 class BookingSchema(Schema):
@@ -45,3 +48,10 @@ class BookingSchema(Schema):
     status = fields.String(dump_only=True)
 
     created_at = fields.DateTime(dump_only=True)
+
+    @validates("event_date")
+    def validate_event_date(self, value, **kwargs):
+        if value < date.today():
+            raise ValidationError(
+                "Event date cannot be in the past."
+            )

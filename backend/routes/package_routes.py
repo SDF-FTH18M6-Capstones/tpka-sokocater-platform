@@ -120,6 +120,8 @@ def create_package():
         }), 201
 
     except ValidationError as error:
+        db.session.rollback()
+
         return jsonify({
             "error": error.messages
         }), 400
@@ -167,6 +169,12 @@ def update_package(package_id):
             "error": "Invalid JSON body"
         }), 400
 
+    # Reject empty update requests.
+    if not data:
+        return jsonify({
+            "error": "No fields provided for update"
+        }), 400
+
     try:
         validated_data = package_schema.load(
             data,
@@ -182,6 +190,31 @@ def update_package(package_id):
                 "error": "You cannot transfer a package to another caterer"
             }), 403
 
+        # Validate the combined guest range.
+        # Use submitted values when provided and existing values otherwise.
+        new_minimum_guests = validated_data.get(
+            "minimum_guests",
+            package.minimum_guests
+        )
+
+        new_maximum_guests = validated_data.get(
+            "maximum_guests",
+            package.maximum_guests
+        )
+
+        if (
+            new_maximum_guests is not None
+            and new_maximum_guests < new_minimum_guests
+        ):
+            return jsonify({
+                "error": {
+                    "maximum_guests": [
+                        "Maximum guests must be greater than or equal to minimum guests."
+                    ]
+                }
+            }), 400
+
+        # Apply validated changes only after all checks pass.
         for field, value in validated_data.items():
             setattr(package, field, value)
 
@@ -193,6 +226,8 @@ def update_package(package_id):
         }), 200
 
     except ValidationError as error:
+        db.session.rollback()
+
         return jsonify({
             "error": error.messages
         }), 400

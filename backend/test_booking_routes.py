@@ -1,6 +1,6 @@
 
 import unittest
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 
 from app import create_app
@@ -121,7 +121,6 @@ class TestBookingRoutes(unittest.TestCase):
         db.session.commit()
 
         # Create an existing booking.
-        # SQLAlchemy Date columns require Python date objects.
         self.booking = Booking(
             customer_id=self.customer.id,
             caterer_id=self.caterer.id,
@@ -195,7 +194,6 @@ class TestBookingRoutes(unittest.TestCase):
         }
 
         # Valid booking request data.
-        # Keep event_date as a string because this is JSON input.
         self.valid_booking_data = {
             "caterer_id": self.caterer.id,
             "package_id": self.package.id,
@@ -481,6 +479,47 @@ class TestBookingRoutes(unittest.TestCase):
 
         self.assertEqual(response.status_code, 400)
 
+    def test_create_booking_with_past_event_date(self):
+
+        data = self.valid_booking_data.copy()
+        data["event_date"] = (
+            date.today() - timedelta(days=1)
+        ).isoformat()
+
+        response = self.client.post(
+            "/api/bookings",
+            json=data,
+            headers=self.customer_headers
+        )
+
+        self.assertEqual(response.status_code, 400)
+
+    def test_create_booking_for_today(self):
+
+        data = self.valid_booking_data.copy()
+        data["event_date"] = date.today().isoformat()
+
+        response = self.client.post(
+            "/api/bookings",
+            json=data,
+            headers=self.customer_headers
+        )
+
+        self.assertEqual(response.status_code, 201)
+
+    def test_create_booking_for_future_date(self):
+
+        data = self.valid_booking_data.copy()
+        data["event_date"] = "2028-06-15"
+
+        response = self.client.post(
+            "/api/bookings",
+            json=data,
+            headers=self.customer_headers
+        )
+
+        self.assertEqual(response.status_code, 201)
+
     # ==================================================
     # UPDATE BOOKING
     # ==================================================
@@ -618,6 +657,16 @@ class TestBookingRoutes(unittest.TestCase):
         )
 
         self.assertEqual(response.status_code, 403)
+
+    def test_customer_cannot_update_booking_to_past_date(self):
+
+        response = self.client.put(
+            f"/api/bookings/{self.booking.id}",
+            json={"event_date": "2020-01-01"},
+            headers=self.customer_headers
+        )
+
+        self.assertEqual(response.status_code, 400)
 
     # ==================================================
     # DELETE BOOKING

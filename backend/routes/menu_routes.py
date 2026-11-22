@@ -1,4 +1,3 @@
-
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import (
     jwt_required,
@@ -24,12 +23,6 @@ menus_schema = MenuSchema(many=True)
 # ==================================================
 
 def get_current_caterer():
-    """
-    Get the caterer profile belonging to the logged-in user.
-
-    Only users with the caterer role can access
-    protected menu operations.
-    """
 
     claims = get_jwt()
 
@@ -95,8 +88,6 @@ def create_menu():
             "error": "Only registered caterers can create menus"
         }), 403
 
-    # silent=True prevents Flask from returning 415
-    # when the request does not contain JSON.
     data = request.get_json(silent=True)
 
     if not isinstance(data, dict):
@@ -107,7 +98,6 @@ def create_menu():
     try:
         validated_data = menu_schema.load(data)
 
-        # A caterer can only create menus for their own profile.
         if validated_data["caterer_id"] != current_caterer.id:
             return jsonify({
                 "error": "You can only create menus for your own profile"
@@ -158,7 +148,6 @@ def update_menu(menu_id):
             "error": "Menu not found"
         }), 404
 
-    # Verify menu ownership.
     if menu.caterer_id != current_caterer.id:
         return jsonify({
             "error": "You can only update your own menus"
@@ -171,13 +160,22 @@ def update_menu(menu_id):
             "error": "Invalid JSON body"
         }), 400
 
+    if not data:
+        return jsonify({
+            "error": "Update data cannot be empty"
+        }), 400
+
     try:
         validated_data = menu_schema.load(
             data,
             partial=True
         )
 
-        # Prevent transferring ownership to another caterer.
+        if not validated_data:
+            return jsonify({
+                "error": "No valid fields provided for update"
+            }), 400
+
         if (
             "caterer_id" in validated_data
             and validated_data["caterer_id"] != current_caterer.id
@@ -197,6 +195,8 @@ def update_menu(menu_id):
         }), 200
 
     except ValidationError as error:
+        db.session.rollback()
+
         return jsonify({
             "error": error.messages
         }), 400
@@ -231,7 +231,6 @@ def delete_menu(menu_id):
             "error": "Menu not found"
         }), 404
 
-    # Verify menu ownership.
     if menu.caterer_id != current_caterer.id:
         return jsonify({
             "error": "You can only delete your own menus"

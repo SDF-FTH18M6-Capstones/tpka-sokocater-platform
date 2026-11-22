@@ -354,6 +354,50 @@ class TestPackageRoutes(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
 
     # ==========================================
+    # ADDITIONAL PACKAGE UPDATE VALIDATION TESTS
+    # ==========================================
+
+    def test_update_minimum_guests_above_existing_maximum(self):
+
+        response = self.client.put(
+            f"/api/packages/{self.package.id}",
+            json={"minimum_guests": 250},
+            headers=self.caterer_headers
+        )
+
+        self.assertEqual(response.status_code, 400)
+
+        db.session.refresh(self.package)
+
+        self.assertEqual(self.package.minimum_guests, 20)
+        self.assertEqual(self.package.maximum_guests, 200)
+
+    def test_update_maximum_guests_below_existing_minimum(self):
+
+        response = self.client.put(
+            f"/api/packages/{self.package.id}",
+            json={"maximum_guests": 10},
+            headers=self.caterer_headers
+        )
+
+        self.assertEqual(response.status_code, 400)
+
+        db.session.refresh(self.package)
+
+        self.assertEqual(self.package.minimum_guests, 20)
+        self.assertEqual(self.package.maximum_guests, 200)
+
+    def test_update_package_with_empty_json(self):
+
+        response = self.client.put(
+            f"/api/packages/{self.package.id}",
+            json={},
+            headers=self.caterer_headers
+        )
+
+        self.assertEqual(response.status_code, 400)
+
+    # ==========================================
     # DELETE PACKAGE
     # ==========================================
 

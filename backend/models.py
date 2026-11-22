@@ -19,7 +19,11 @@ class User(db.Model):
     password_hash = db.Column(db.String(255), nullable=False)
     role = db.Column(db.String(20), nullable=False)
     phone_number = db.Column(db.String(20))
-    created_at = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(UTC))
+    created_at = db.Column(
+        db.DateTime,
+        nullable=False,
+        default=lambda: datetime.now(UTC)
+    )
 
     __table_args__ = (
         CheckConstraint(
@@ -75,7 +79,11 @@ class CatererProfile(db.Model):
     contact_number = db.Column(db.String(20))
     business_image = db.Column(db.String(255))
     verification_status = db.Column(db.String(20), nullable=False)
-    created_at = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(UTC))
+    created_at = db.Column(
+        db.DateTime,
+        nullable=False,
+        default=lambda: datetime.now(UTC)
+    )
 
     user = db.relationship(
         "User",
@@ -112,9 +120,77 @@ class CatererProfile(db.Model):
         back_populates="caterer"
     )
 
+    # One caterer can offer multiple cuisines
+    cuisines = db.relationship(
+        "CatererCuisine",
+        back_populates="caterer"
+    )
+
 
 # ============================================================
-# 3. MENU MODEL
+# 3. CUISINE MODEL
+# ============================================================
+
+class Cuisine(db.Model):
+    __tablename__ = "cuisines"
+
+    id = db.Column(db.Integer, primary_key=True)
+    cuisine_name = db.Column(
+        db.String(100),
+        unique=True,
+        nullable=False
+    )
+
+    # One cuisine can be offered by multiple caterers
+    caterers = db.relationship(
+        "CatererCuisine",
+        back_populates="cuisine"
+    )
+
+
+# ============================================================
+# 4. CATERER CUISINE MODEL
+# ============================================================
+
+class CatererCuisine(db.Model):
+    __tablename__ = "caterer_cuisines"
+
+    id = db.Column(db.Integer, primary_key=True)
+
+    caterer_id = db.Column(
+        db.Integer,
+        db.ForeignKey("caterer_profiles.id"),
+        nullable=False
+    )
+
+    cuisine_id = db.Column(
+        db.Integer,
+        db.ForeignKey("cuisines.id"),
+        nullable=False
+    )
+
+    # A caterer cannot be assigned the same cuisine twice
+    __table_args__ = (
+        UniqueConstraint(
+            "caterer_id",
+            "cuisine_id",
+            name="unique_caterer_cuisine"
+        ),
+    )
+
+    caterer = db.relationship(
+        "CatererProfile",
+        back_populates="cuisines"
+    )
+
+    cuisine = db.relationship(
+        "Cuisine",
+        back_populates="caterers"
+    )
+
+
+# ============================================================
+# 5. MENU MODEL
 # ============================================================
 
 class Menu(db.Model):
@@ -130,7 +206,11 @@ class Menu(db.Model):
 
     menu_name = db.Column(db.String(100), nullable=False)
     description = db.Column(db.Text)
-    created_at = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(UTC))
+    created_at = db.Column(
+        db.DateTime,
+        nullable=False,
+        default=lambda: datetime.now(UTC)
+    )
 
     caterer = db.relationship(
         "CatererProfile",
@@ -144,7 +224,7 @@ class Menu(db.Model):
 
 
 # ============================================================
-# 4. MENU ITEM MODEL
+# 6. MENU ITEM MODEL
 # ============================================================
 
 class MenuItem(db.Model):
@@ -164,7 +244,10 @@ class MenuItem(db.Model):
     image_url = db.Column(db.String(255))
 
     __table_args__ = (
-        CheckConstraint("price >= 0", name="check_menu_item_price"),
+        CheckConstraint(
+            "price >= 0",
+            name="check_menu_item_price"
+        ),
     )
 
     menu = db.relationship(
@@ -179,7 +262,7 @@ class MenuItem(db.Model):
 
 
 # ============================================================
-# 5. PACKAGE MODEL
+# 7. PACKAGE MODEL
 # ============================================================
 
 class Package(db.Model):
@@ -231,7 +314,7 @@ class Package(db.Model):
 
 
 # ============================================================
-# 6. PACKAGE ITEM MODEL
+# 8. PACKAGE ITEM MODEL
 # ============================================================
 
 class PackageItem(db.Model):
@@ -271,7 +354,7 @@ class PackageItem(db.Model):
 
 
 # ============================================================
-# 7. ADD-ON MODEL
+# 9. ADD-ON MODEL
 # ============================================================
 
 class AddOn(db.Model):
@@ -290,7 +373,10 @@ class AddOn(db.Model):
     price = db.Column(db.Numeric(10, 2), nullable=False)
 
     __table_args__ = (
-        CheckConstraint("price >= 0", name="check_addon_price"),
+        CheckConstraint(
+            "price >= 0",
+            name="check_addon_price"
+        ),
     )
 
     caterer = db.relationship(
@@ -305,7 +391,7 @@ class AddOn(db.Model):
 
 
 # ============================================================
-# 8. BOOKING MODEL
+# 10. BOOKING MODEL
 # ============================================================
 
 class Booking(db.Model):
@@ -331,7 +417,11 @@ class Booking(db.Model):
     guest_count = db.Column(db.Integer, nullable=False)
     estimated_total = db.Column(db.Numeric(10, 2), nullable=False)
     status = db.Column(db.String(20), nullable=False, default="pending")
-    created_at = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(UTC))
+    created_at = db.Column(
+        db.DateTime,
+        nullable=False,
+        default=lambda: datetime.now(UTC)
+    )
 
     __table_args__ = (
         CheckConstraint(
@@ -378,7 +468,7 @@ class Booking(db.Model):
 
 
 # ============================================================
-# 9. BOOKING ITEM MODEL
+# 11. BOOKING ITEM MODEL
 # ============================================================
 
 class BookingItem(db.Model):
@@ -440,7 +530,7 @@ class BookingItem(db.Model):
 
 
 # ============================================================
-# 10. AVAILABILITY MODEL
+# 12. AVAILABILITY MODEL
 # ============================================================
 
 class Availability(db.Model):
@@ -476,7 +566,7 @@ class Availability(db.Model):
 
 
 # ============================================================
-# 11. PAYMENT MODEL
+# 13. PAYMENT MODEL
 # ============================================================
 
 class Payment(db.Model):
@@ -519,7 +609,7 @@ class Payment(db.Model):
 
 
 # ============================================================
-# 12. REVIEW MODEL
+# 14. REVIEW MODEL
 # ============================================================
 
 class Review(db.Model):
@@ -548,7 +638,11 @@ class Review(db.Model):
 
     rating = db.Column(db.Integer, nullable=False)
     comment = db.Column(db.Text)
-    created_at = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(UTC))
+    created_at = db.Column(
+        db.DateTime,
+        nullable=False,
+        default=lambda: datetime.now(UTC)
+    )
 
     __table_args__ = (
         CheckConstraint(
@@ -574,7 +668,7 @@ class Review(db.Model):
 
 
 # ============================================================
-# 13. NOTIFICATION MODEL
+# 15. NOTIFICATION MODEL
 # ============================================================
 
 class Notification(db.Model):
@@ -591,7 +685,11 @@ class Notification(db.Model):
     message = db.Column(db.Text, nullable=False)
     notification_type = db.Column(db.String(50), nullable=False)
     is_read = db.Column(db.Boolean, nullable=False, default=False)
-    created_at = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(UTC))
+    created_at = db.Column(
+        db.DateTime,
+        nullable=False,
+        default=lambda: datetime.now(UTC)
+    )
 
     user = db.relationship(
         "User",
@@ -599,6 +697,9 @@ class Notification(db.Model):
     )
 
 
-# Backward-compatible name used by existing routes
-Caterer = CatererProfile
+# ============================================================
+# BACKWARD-COMPATIBLE CATERER NAME
+# ============================================================
 
+# Existing routes may use Caterer instead of CatererProfile.
+Caterer = CatererProfile

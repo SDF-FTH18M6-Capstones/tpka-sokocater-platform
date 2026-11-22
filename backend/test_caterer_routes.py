@@ -6,7 +6,7 @@ from werkzeug.security import generate_password_hash
 
 from app import create_app
 from extensions import db
-from models import User, Caterer
+from models import User, Caterer, Menu
 
 
 class TestCatererRoutes(unittest.TestCase):
@@ -56,7 +56,6 @@ class TestCatererRoutes(unittest.TestCase):
         email="test@example.com",
         role="customer"
     ):
-
         user = User(
             full_name=full_name,
             email=email,
@@ -70,7 +69,6 @@ class TestCatererRoutes(unittest.TestCase):
         return user
 
     def create_token(self, user):
-
         token = create_access_token(
             identity=str(user.id),
             additional_claims={
@@ -83,9 +81,13 @@ class TestCatererRoutes(unittest.TestCase):
         }
 
     def create_caterer_profile(self, user=None, **overrides):
-
         if user is None:
             user = self.caterer_user
+
+        verification_status = overrides.pop(
+            "verification_status",
+            "pending"
+        )
 
         data = {
             "user_id": user.id,
@@ -100,7 +102,7 @@ class TestCatererRoutes(unittest.TestCase):
 
         caterer = Caterer(
             **data,
-            verification_status="pending"
+            verification_status=verification_status
         )
 
         db.session.add(caterer)
@@ -109,7 +111,6 @@ class TestCatererRoutes(unittest.TestCase):
         return caterer
 
     def valid_profile_data(self, user=None):
-
         if user is None:
             user = self.caterer_user
 
@@ -127,7 +128,6 @@ class TestCatererRoutes(unittest.TestCase):
     # ==================================================
 
     def test_get_all_caterers_successful(self):
-
         self.create_caterer_profile()
 
         response = self.client.get("/api/caterers")
@@ -140,13 +140,40 @@ class TestCatererRoutes(unittest.TestCase):
         self.assertEqual(len(data["data"]), 1)
 
     def test_get_all_caterers_without_authentication(self):
+        response = self.client.get("/api/caterers")
+
+        self.assertEqual(response.status_code, 200)
+
+    def test_pending_and_verified_caterers_are_publicly_visible(self):
+        self.create_caterer_profile(
+            user=self.caterer_user,
+            verification_status="pending"
+        )
+
+        self.create_caterer_profile(
+            user=self.other_caterer_user,
+            verification_status="verified"
+        )
 
         response = self.client.get("/api/caterers")
 
         self.assertEqual(response.status_code, 200)
 
-    def test_get_single_caterer_successful(self):
+        caterers = response.get_json()["data"]
 
+        self.assertEqual(len(caterers), 2)
+
+        statuses = {
+            caterer["verification_status"]
+            for caterer in caterers
+        }
+
+        self.assertEqual(
+            statuses,
+            {"pending", "verified"}
+        )
+
+    def test_get_single_caterer_successful(self):
         caterer = self.create_caterer_profile()
 
         response = self.client.get(
@@ -163,7 +190,6 @@ class TestCatererRoutes(unittest.TestCase):
         )
 
     def test_get_single_caterer_not_found(self):
-
         response = self.client.get("/api/caterers/999")
 
         self.assertEqual(response.status_code, 404)
@@ -173,7 +199,6 @@ class TestCatererRoutes(unittest.TestCase):
     # ==================================================
 
     def test_create_caterer_successful(self):
-
         response = self.client.post(
             "/api/caterers",
             json=self.valid_profile_data(),
@@ -200,7 +225,6 @@ class TestCatererRoutes(unittest.TestCase):
         )
 
     def test_create_caterer_without_token(self):
-
         response = self.client.post(
             "/api/caterers",
             json=self.valid_profile_data()
@@ -209,7 +233,6 @@ class TestCatererRoutes(unittest.TestCase):
         self.assertEqual(response.status_code, 401)
 
     def test_customer_cannot_create_caterer_profile(self):
-
         response = self.client.post(
             "/api/caterers",
             json=self.valid_profile_data(self.customer_user),
@@ -219,7 +242,6 @@ class TestCatererRoutes(unittest.TestCase):
         self.assertEqual(response.status_code, 403)
 
     def test_caterer_cannot_create_profile_for_another_user(self):
-
         response = self.client.post(
             "/api/caterers",
             json=self.valid_profile_data(self.other_caterer_user),
@@ -229,7 +251,6 @@ class TestCatererRoutes(unittest.TestCase):
         self.assertEqual(response.status_code, 403)
 
     def test_duplicate_caterer_profile_rejected(self):
-
         self.create_caterer_profile()
 
         response = self.client.post(
@@ -241,7 +262,6 @@ class TestCatererRoutes(unittest.TestCase):
         self.assertEqual(response.status_code, 409)
 
     def test_create_caterer_with_invalid_data(self):
-
         data = self.valid_profile_data()
         data["business_name"] = "A"
 
@@ -253,8 +273,43 @@ class TestCatererRoutes(unittest.TestCase):
 
         self.assertEqual(response.status_code, 400)
 
-    def test_create_caterer_without_json(self):
+    def test_create_caterer_with_whitespace_business_name(self):
+        data = self.valid_profile_data()
+        data["business_name"] = "   "
 
+        response = self.client.post(
+            "/api/caterers",
+            json=data,
+            headers=self.create_token(self.caterer_user)
+        )
+
+        self.assertEqual(response.status_code, 400)
+
+    def test_create_caterer_with_whitespace_location(self):
+        data = self.valid_profile_data()
+        data["location"] = "   "
+
+        response = self.client.post(
+            "/api/caterers",
+            json=data,
+            headers=self.create_token(self.caterer_user)
+        )
+
+        self.assertEqual(response.status_code, 400)
+
+    def test_create_caterer_with_business_image_over_255_characters(self):
+        data = self.valid_profile_data()
+        data["business_image"] = "a" * 256
+
+        response = self.client.post(
+            "/api/caterers",
+            json=data,
+            headers=self.create_token(self.caterer_user)
+        )
+
+        self.assertEqual(response.status_code, 400)
+
+    def test_create_caterer_without_json(self):
         response = self.client.post(
             "/api/caterers",
             headers=self.create_token(self.caterer_user)
@@ -263,7 +318,6 @@ class TestCatererRoutes(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
 
     def test_verification_status_cannot_be_supplied(self):
-
         data = self.valid_profile_data()
         data["verification_status"] = "verified"
 
@@ -286,7 +340,6 @@ class TestCatererRoutes(unittest.TestCase):
     # ==================================================
 
     def test_update_own_caterer_profile_successful(self):
-
         caterer = self.create_caterer_profile()
 
         response = self.client.put(
@@ -305,7 +358,6 @@ class TestCatererRoutes(unittest.TestCase):
         )
 
     def test_update_caterer_without_token(self):
-
         caterer = self.create_caterer_profile()
 
         response = self.client.put(
@@ -318,7 +370,6 @@ class TestCatererRoutes(unittest.TestCase):
         self.assertEqual(response.status_code, 401)
 
     def test_customer_cannot_update_caterer_profile(self):
-
         caterer = self.create_caterer_profile()
 
         response = self.client.put(
@@ -332,7 +383,6 @@ class TestCatererRoutes(unittest.TestCase):
         self.assertEqual(response.status_code, 403)
 
     def test_caterer_cannot_update_another_profile(self):
-
         caterer = self.create_caterer_profile()
 
         response = self.client.put(
@@ -346,7 +396,6 @@ class TestCatererRoutes(unittest.TestCase):
         self.assertEqual(response.status_code, 403)
 
     def test_update_nonexistent_caterer(self):
-
         response = self.client.put(
             "/api/caterers/999",
             json={
@@ -358,7 +407,6 @@ class TestCatererRoutes(unittest.TestCase):
         self.assertEqual(response.status_code, 404)
 
     def test_caterer_cannot_change_profile_ownership(self):
-
         caterer = self.create_caterer_profile()
 
         response = self.client.put(
@@ -371,12 +419,94 @@ class TestCatererRoutes(unittest.TestCase):
 
         self.assertEqual(response.status_code, 403)
 
+    def test_empty_update_request_is_rejected(self):
+        caterer = self.create_caterer_profile()
+
+        response = self.client.put(
+            f"/api/caterers/{caterer.id}",
+            json={},
+            headers=self.create_token(self.caterer_user)
+        )
+
+        self.assertEqual(response.status_code, 400)
+
+        self.assertEqual(
+            response.get_json()["error"],
+            "No update data provided"
+        )
+
+    def test_update_with_invalid_json_is_rejected(self):
+        caterer = self.create_caterer_profile()
+
+        response = self.client.put(
+            f"/api/caterers/{caterer.id}",
+            data="this is not valid JSON",
+            content_type="application/json",
+            headers=self.create_token(self.caterer_user)
+        )
+
+        self.assertEqual(response.status_code, 400)
+
+    def test_caterer_cannot_change_verification_status(self):
+        caterer = self.create_caterer_profile()
+
+        response = self.client.put(
+            f"/api/caterers/{caterer.id}",
+            json={
+                "verification_status": "verified"
+            },
+            headers=self.create_token(self.caterer_user)
+        )
+
+        self.assertEqual(response.status_code, 400)
+
+        db.session.refresh(caterer)
+
+        self.assertEqual(
+            caterer.verification_status,
+            "pending"
+        )
+
+    def test_update_with_whitespace_business_name_is_rejected(self):
+        caterer = self.create_caterer_profile()
+
+        response = self.client.put(
+            f"/api/caterers/{caterer.id}",
+            json={
+                "business_name": "   "
+            },
+            headers=self.create_token(self.caterer_user)
+        )
+
+        self.assertEqual(response.status_code, 400)
+
+    # ==================================================
+    # INVALID JWT IDENTITY
+    # ==================================================
+
+    def test_invalid_jwt_identity_is_rejected(self):
+        token = create_access_token(
+            identity="not-an-integer",
+            additional_claims={
+                "role": "caterer"
+            }
+        )
+
+        response = self.client.post(
+            "/api/caterers",
+            json=self.valid_profile_data(),
+            headers={
+                "Authorization": f"Bearer {token}"
+            }
+        )
+
+        self.assertEqual(response.status_code, 401)
+
     # ==================================================
     # DELETE CATERER ROUTE
     # ==================================================
 
     def test_delete_own_caterer_profile_successful(self):
-
         caterer = self.create_caterer_profile()
 
         caterer_id = caterer.id
@@ -392,8 +522,36 @@ class TestCatererRoutes(unittest.TestCase):
             db.session.get(Caterer, caterer_id)
         )
 
-    def test_delete_caterer_without_token(self):
+    def test_delete_caterer_with_related_menu_returns_conflict(self):
+        caterer = self.create_caterer_profile()
 
+        menu = Menu(
+            caterer_id=caterer.id,
+            menu_name="Lunch Menu"
+        )
+
+        db.session.add(menu)
+        db.session.commit()
+
+        caterer_id = caterer.id
+        menu_id = menu.id
+
+        response = self.client.delete(
+            f"/api/caterers/{caterer_id}",
+            headers=self.create_token(self.caterer_user)
+        )
+
+        self.assertEqual(response.status_code, 409)
+
+        self.assertIsNotNone(
+            db.session.get(Caterer, caterer_id)
+        )
+
+        self.assertIsNotNone(
+            db.session.get(Menu, menu_id)
+        )
+
+    def test_delete_caterer_without_token(self):
         caterer = self.create_caterer_profile()
 
         response = self.client.delete(
@@ -403,7 +561,6 @@ class TestCatererRoutes(unittest.TestCase):
         self.assertEqual(response.status_code, 401)
 
     def test_customer_cannot_delete_caterer_profile(self):
-
         caterer = self.create_caterer_profile()
 
         response = self.client.delete(
@@ -414,7 +571,6 @@ class TestCatererRoutes(unittest.TestCase):
         self.assertEqual(response.status_code, 403)
 
     def test_caterer_cannot_delete_another_profile(self):
-
         caterer = self.create_caterer_profile()
 
         response = self.client.delete(
@@ -425,7 +581,6 @@ class TestCatererRoutes(unittest.TestCase):
         self.assertEqual(response.status_code, 403)
 
     def test_delete_nonexistent_caterer(self):
-
         response = self.client.delete(
             "/api/caterers/999",
             headers=self.create_token(self.caterer_user)
