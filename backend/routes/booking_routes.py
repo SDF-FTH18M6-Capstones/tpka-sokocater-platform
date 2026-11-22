@@ -9,12 +9,10 @@ from extensions import db
 from models import Booking, BookingItem, User, Caterer, Package
 from schemas.booking_schema import BookingSchema
 
-
 booking_bp = Blueprint("bookings", __name__)
 
 booking_schema = BookingSchema()
 bookings_schema = BookingSchema(many=True)
-
 
 def get_booking_total(booking):
     """Calculate the total from all booking items."""
@@ -24,7 +22,6 @@ def get_booking_total(booking):
         total += Decimal(str(item.unit_price)) * item.quantity
 
     return total
-
 
 def validate_package(package, caterer_id, guest_count):
     """Check that a package belongs to the caterer and supports the guest count."""
@@ -51,7 +48,6 @@ def validate_package(package, caterer_id, guest_count):
         )
 
     return None
-
 
 # ============================================================
 # GET ALL BOOKINGS
@@ -94,7 +90,6 @@ def get_bookings():
         "message": "Bookings retrieved successfully",
         "data": bookings_schema.dump(bookings)
     }), 200
-
 
 # ============================================================
 # GET ONE BOOKING
@@ -141,7 +136,6 @@ def get_booking(booking_id):
         "data": booking_schema.dump(booking)
     }), 200
 
-
 # ============================================================
 # CREATE BOOKING
 # CUSTOMER ONLY
@@ -176,33 +170,35 @@ def create_booking():
                 "error": "Customer not found"
             }), 404
 
-        caterer = db.session.get(
-            Caterer,
-            validated_data["caterer_id"]
-        )
+        # FIX 1: Use .get() to avoid KeyError -> return 400 instead of 500
+        caterer_id = validated_data.get("caterer_id")
+        package_id = validated_data.get("package_id")
+        guest_count = validated_data.get("guest_count")
+
+        if caterer_id is None or package_id is None or guest_count is None:
+            return jsonify({
+                "error": "caterer_id, package_id and guest_count are required"
+            }), 400
+
+        caterer = db.session.get(Caterer, caterer_id)
 
         if not caterer:
             return jsonify({
                 "error": "Caterer not found"
             }), 404
 
-        package = db.session.get(
-            Package,
-            validated_data["package_id"]
-        )
+        package = db.session.get(Package, package_id)
 
         package_error = validate_package(
             package,
             caterer.id,
-            validated_data["guest_count"]
+            guest_count
         )
 
         if package_error:
             return jsonify({
                 "error": package_error
             }), 400
-
-        guest_count = validated_data["guest_count"]
 
         estimated_total = (
             Decimal(str(package.price_per_guest)) * guest_count
@@ -211,11 +207,13 @@ def create_booking():
         booking = Booking(
             customer_id=current_user_id,
             caterer_id=caterer.id,
-            event_date=validated_data["event_date"],
-            event_type=validated_data["event_type"],
-            event_location=validated_data["event_location"],
+            event_date=validated_data.get("event_date"),
+            event_type=validated_data.get("event_type"),
+            event_location=validated_data.get("event_location"),
             guest_count=guest_count,
-            estimated_total=estimated_total
+            estimated_total=estimated_total,
+            # FIX 2: Force pending, client cannot create as accepted/confirmed
+            status="pending"
         )
 
         db.session.add(booking)
@@ -250,7 +248,6 @@ def create_booking():
         return jsonify({
             "error": "Unable to create booking"
         }), 409
-
 
 # ============================================================
 # UPDATE BOOKING
@@ -473,7 +470,6 @@ def update_booking(booking_id):
         return jsonify({
             "error": "Unable to update booking"
         }), 409
-
 
 # ============================================================
 # DELETE BOOKING

@@ -1,4 +1,3 @@
-
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import jwt_required, get_jwt_identity, get_jwt
 from sqlalchemy.exc import IntegrityError
@@ -8,12 +7,10 @@ from extensions import db
 from models import User, Caterer
 from schemas.caterer_schema import CatererSchema
 
-
 caterer_bp = Blueprint("caterers", __name__)
 
 caterer_schema = CatererSchema()
 caterers_schema = CatererSchema(many=True)
-
 
 # ============================================================
 # GET ALL CATERERS
@@ -29,7 +26,6 @@ def get_caterers():
         "message": "Caterers retrieved successfully",
         "data": caterers_schema.dump(caterers)
     }), 200
-
 
 # ============================================================
 # GET ONE CATERER
@@ -49,7 +45,6 @@ def get_caterer(caterer_id):
     return jsonify({
         "data": caterer_schema.dump(caterer)
     }), 200
-
 
 # ============================================================
 # CREATE CATERER PROFILE
@@ -78,7 +73,10 @@ def create_caterer():
     try:
         validated_data = caterer_schema.load(data)
 
-        if validated_data["user_id"] != current_user_id:
+        # FIX 1: Remove verification_status if schema sent it, to avoid duplicate kwarg crash
+        validated_data.pop("verification_status", None)
+
+        if validated_data.get("user_id") != current_user_id:
             return jsonify({
                 "error": "You can only create a profile for yourself"
             }), 403
@@ -131,7 +129,6 @@ def create_caterer():
             "error": "A caterer profile already exists for this user"
         }), 409
 
-
 # ============================================================
 # UPDATE CATERER PROFILE
 # CATERER ONLY - OWN PROFILE
@@ -174,10 +171,20 @@ def update_caterer(caterer_id):
                 "error": "You cannot change profile ownership"
             }), 403
 
+        # FIX 2: Block self-verification on update
+        if "verification_status" in data:
+            return jsonify({
+                "error": "You cannot change verification status"
+            }), 403
+
         validated_data = caterer_schema.load(
             data,
             partial=True
         )
+
+        # Extra safety: never allow it even if schema passes it
+        validated_data.pop("verification_status", None)
+        validated_data.pop("user_id", None)
 
         for field, value in validated_data.items():
             setattr(caterer, field, value)
@@ -200,7 +207,6 @@ def update_caterer(caterer_id):
         return jsonify({
             "error": "Database conflict"
         }), 409
-
 
 # ============================================================
 # DELETE CATERER PROFILE
