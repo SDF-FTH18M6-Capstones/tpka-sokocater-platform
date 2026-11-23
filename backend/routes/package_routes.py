@@ -8,7 +8,7 @@ from sqlalchemy.exc import IntegrityError
 from marshmallow import ValidationError
 
 from extensions import db
-from models import Package, Caterer
+from models import Package, Caterer, PackageItem
 from schemas.package_schema import PackageSchema
 
 package_bp = Blueprint("packages", __name__)
@@ -94,16 +94,17 @@ def create_package():
             "error": "Invalid JSON body"
         }), 400
 
-        # FIX: If client sends another caterer's id, reject it
     if "caterer_id" in data and data["caterer_id"] != current_caterer.id:
         return jsonify({
             "error": "You can only create packages for your own profile"
         }), 403
 
     try:
-        # Inject caterer_id from JWT BEFORE validation
+        # 1. Pull menus OUT before validation - schema doesn't know this field
         data = dict(data)
+        menu_item_ids = data.pop("menu_item_ids", [])
         data["caterer_id"] = current_caterer.id
+
         validated_data = package_schema.load(data)
         validated_data.pop("caterer_id", None)
 
@@ -113,23 +114,32 @@ def create_package():
         )
 
         db.session.add(package)
+        db.session.flush()  # gets package.id
+
+        # 2. THIS IS THE MISSING #2 - link menus in one go
+        for item_id in menu_item_ids:
+            db.session.add(PackageItem(
+                package_id=package.id,
+                menu_item_id=item_id
+            ))
+
         db.session.commit()
 
         return jsonify({
-            "message": "Package created successfully",
+            "message": "Package created successfully with menus",
             "data": package_schema.dump(package)
         }), 201
 
     except ValidationError as error:
+        db.session.rollback()
         return jsonify({
             "error": error.messages
         }), 400
 
     except IntegrityError:
         db.session.rollback()
-
         return jsonify({
-            "error": "Unable to create package"
+            "error": "Unable to create package - one of the menu ids does not exist"
         }), 409
 
 # ==================================================

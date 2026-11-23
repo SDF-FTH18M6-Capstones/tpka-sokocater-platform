@@ -4,7 +4,7 @@ from sqlalchemy.exc import IntegrityError
 from marshmallow import ValidationError
 
 from extensions import db
-from models import User, Caterer
+from models import User, Caterer, Package
 from schemas.caterer_schema import CatererSchema
 
 caterer_bp = Blueprint("caterers", __name__)
@@ -12,21 +12,49 @@ caterer_bp = Blueprint("caterers", __name__)
 caterer_schema = CatererSchema()
 caterers_schema = CatererSchema(many=True)
 
+
 # ============================================================
 # GET ALL CATERERS
-# PUBLIC
+# PUBLIC - supports ?min_price=&max_price=
 # ============================================================
 
 @caterer_bp.route("/api/caterers", methods=["GET"])
 def get_caterers():
+    # #4: Filter caterers by package price_per_guest
+    min_price = request.args.get("min_price")
+    max_price = request.args.get("max_price")
 
-    caterers = Caterer.query.all()
+    try:
+        min_price = float(min_price) if min_price is not None else None
+        max_price = float(max_price) if max_price is not None else None
+    except ValueError:
+        return jsonify({
+            "error": "min_price and max_price must be numbers"
+        }), 400
+
+    if min_price is not None and min_price < 0:
+        return jsonify({"error": "min_price cannot be negative"}), 400
+    if max_price is not None and max_price < 0:
+        return jsonify({"error": "max_price cannot be negative"}), 400
+    if min_price is not None and max_price is not None and min_price > max_price:
+        return jsonify({"error": "min_price cannot be greater than max_price"}), 400
+
+    query = Caterer.query
+
+    if min_price is not None or max_price is not None:
+        query = query.join(Package, Package.caterer_id == Caterer.id)
+        if min_price is not None:
+            query = query.filter(Package.price_per_guest >= min_price)
+        if max_price is not None:
+            query = query.filter(Package.price_per_guest <= max_price)
+        query = query.distinct()
+
+    caterers = query.all()
 
     return jsonify({
         "message": "Caterers retrieved successfully",
         "data": caterers_schema.dump(caterers)
     }), 200
-
 # ============================================================
 # GET ONE CATERER
 # PUBLIC
@@ -42,8 +70,39 @@ def get_caterer(caterer_id):
             "error": "Caterer not found"
         }), 404
 
+        # #5: Include packages with their menu items
+    data = caterer_schema.dump(caterer)
+
+    packages_data = []
+    for package in caterer.packages:
+        menu_items = []
+        for item in package.package_items:
+            mi = item.menu_item
+            if mi:
+                menu_items.append({
+                    "id": mi.id,
+                    "item_name": mi.item_name,
+                    "description": mi.description,
+                    "price": float(mi.price) if mi.price is not None else None,
+                    "image_url": mi.image_url,
+                })
+
+        packages_data.append({
+            "id": package.id,
+            "package_name": package.package_name,
+            "description": package.description,
+            "price_per_guest": float(package.price_per_guest) if package.price_per_guest is not None else None,
+            "minimum_guests": package.minimum_guests,
+            "maximum_guests": package.maximum_guests,
+            "menu_items": menu_items,
+            # alias for frontend that expects "menus"
+            "menus": menu_items,
+        })
+
+    data["packages"] = packages_data
+
     return jsonify({
-        "data": caterer_schema.dump(caterer)
+        "data": data
     }), 200
 
 # ============================================================
