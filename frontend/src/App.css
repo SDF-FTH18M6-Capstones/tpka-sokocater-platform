@@ -415,3 +415,562 @@
   padding: 25px;
   text-align: center;
 }
+/* =================================
+   SOKOCATER HOMEPAGE IMAGE STYLING
+================================= */
+
+.hero {
+  min-height: 580px;
+  padding: 90px 8%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  background:
+    linear-gradient(90deg, rgba(12, 35, 25, 0.82), rgba(12, 35, 25, 0.25)),
+    url("https://images.unsplash.com/photo-1511795409834-ef04bbd61622?auto=format&fit=crop&w=1800&q=85");
+  background-size: cover;
+  background-position: center;
+  color: white;
+}
+
+.hero h1 {
+  max-width: 650px;
+  font-family: "Playfair Display", serif;
+  font-size: clamp(42px, 6vw, 68px);
+  line-height: 1.12;
+  margin: 15px 0;
+}
+
+.hero p {
+  max-width: 560px;
+  line-height: 1.8;
+}
+
+.hero .eyebrow,
+.listing-hero .eyebrow {
+  color: #ffc36b;
+  font-weight: 700;
+  letter-spacing: 2px;
+}
+
+.category-card {
+  padding: 0;
+  overflow: hidden;
+  border-radius: 16px;
+  background: white;
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.08);
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+
+.category-card:hover {
+  transform: translateY(-6px);
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.12);
+}
+
+.category-image {
+  width: 100%;
+  height: 220px;
+  object-fit: cover;
+}
+
+.category-card-content {
+  padding: 24px;
+}
+
+.about {
+  background:
+    linear-gradient(rgba(15, 48, 34, 0.88), rgba(15, 48, 34, 0.88)),
+    url("https://images.unsplash.com/photo-1414235077428-338989a2e8c0?auto=format&fit=crop&w=1600&q=85");
+  background-size: cover;
+  background-position: center;
+  color: white;
+}
+
+
+/* =================================
+   CATERER LISTING PAGE
+================================= */
+
+.listing-page,
+.detail-page {
+  background: #faf9f5;
+  min-height: 100vh;
+}
+
+.listing-hero,
+.detail-hero {
+  padding: 85px 8%;
+  text-align: center;
+  background: #174c35;
+  color: white;
+}
+
+.listing-hero h1,
+.detail-hero h1 {
+  font-family: "Playfair Display", serif;
+  font-size: clamp(36px, 5vw, 54px);
+  margin: 15px 0;
+}
+
+.listing-hero > p:last-child,
+.detail-hero > p:last-child {
+  max-width: 650px;
+  margin: 0 auto;
+  line-height: 1.8;
+  color: #e5eee8;
+}
+
+.listing-content,
+.detail-content {
+  width: min(1150px, 88%);
+  margin: 0 auto;
+  padding: 70px 0;
+}
+
+.listing-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+  margin-bottom: 35px;
+}
+
+.listing-heading h2,
+.detail-intro h2 {
+  font-family: "Playfair Display", serif;
+  color: #174c35;
+  font-size: 32px;
+  margin-top: 8px;
+}
+
+.listing-heading .eyebrow,
+.detail-intro .eyebrow {
+  color: #b8792b;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+}
+
+.clear-filter {
+  color: #174c35;
+  font-weight: 700;
+  border-bottom: 1px solid #174c35;
+  padding-bottom: 5px;
+}
+
+.caterer-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 28px;
+}
+
+.caterer-card {
+  overflow: hidden;
+  background: white;
+  border-radius: 16px;
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.07);
+  transition: transform 0.25s ease;
+}
+
+.caterer-card:hover {
+  transform: translateY(-6px);
+}
+
+.caterer-image {
+  width: 100%;
+  height: 230px;
+  object-fit: cover;
+}
+
+.caterer-card-content {
+  padding: 25px;
+}
+
+.caterer-category,
+.detail-category {
+  display: inline-block;
+  background: #edf4ee;
+  color: #285b42;
+  padding: 7px 12px;
+  border-radius: 30px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.caterer-card h3 {
+  color: #174c35;
+  font-size: 21px;
+  margin: 15px 0 10px;
+}
+
+.caterer-card p {
+  color: #68756d;
+  line-height: 1.7;
+  margin-bottom: 22px;
+}
+
+.caterer-button,
+.package-button {
+  display: inline-block;
+  background: #174c35;
+  color: white;
+  padding: 12px 22px;
+  border-radius: 7px;
+  font-weight: 700;
+  transition: background 0.2s ease;
+}
+
+.caterer-button:hover,
+.package-button:hover {
+  background: #286b49;
+}
+
+.empty-listing {
+  text-align: center;
+  padding: 60px 20px;
+  background: white;
+  border-radius: 14px;
+}
+
+.empty-listing h3 {
+  color: #174c35;
+  margin-bottom: 10px;
+}
+
+.empty-listing p {
+  color: #68756d;
+  margin-bottom: 18px;
+}
+
+.empty-listing a {
+  color: #174c35;
+  font-weight: 700;
+}
+
+
+/* =================================
+   CATERER DETAIL PAGE
+================================= */
+
+.detail-hero .detail-category {
+  margin: 12px 0;
+}
+
+.detail-intro {
+  text-align: center;
+  margin-bottom: 40px;
+}
+
+.detail-intro > p:last-child {
+  color: #68756d;
+  margin-top: 12px;
+  line-height: 1.7;
+}
+
+.package-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 25px;
+}
+
+.package-card {
+  position: relative;
+  padding: 32px 25px;
+  background: white;
+  border: 1px solid #e8e9e3;
+  border-radius: 15px;
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.05);
+}
+
+.package-card h3 {
+  color: #174c35;
+  font-size: 22px;
+  margin-bottom: 14px;
+}
+
+.popular-label {
+  display: inline-block;
+  background: #fff0d8;
+  color: #9a611b;
+  padding: 6px 10px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 800;
+  margin-bottom: 15px;
+}
+
+.package-description {
+  color: #68756d;
+  line-height: 1.7;
+  min-height: 55px;
+}
+
+.package-price {
+  color: #174c35;
+  font-size: 26px;
+  margin: 25px 0;
+}
+
+.package-price span {
+  font-size: 13px;
+  color: #7b857e;
+  font-weight: 400;
+}
+
+.package-button {
+  display: block;
+  text-align: center;
+}
+
+.price-note {
+  color: #7b857e;
+  font-size: 13px;
+  line-height: 1.6;
+  text-align: center;
+  margin: 30px auto;
+  max-width: 700px;
+}
+
+.detail-reviews {
+  background: white;
+  padding: 30px;
+  border-radius: 14px;
+  margin: 45px 0 30px;
+}
+
+.detail-reviews h2 {
+  color: #174c35;
+  margin-bottom: 12px;
+}
+
+.detail-reviews p {
+  color: #68756d;
+  margin-top: 8px;
+}
+
+.detail-reviews p:nth-child(2) {
+  color: #d18a2e;
+  font-size: 22px;
+}
+
+.back-link {
+  display: inline-block;
+  color: #174c35;
+  font-weight: 700;
+  margin-top: 15px;
+}
+
+
+/* =================================
+   RESPONSIVE DESIGN
+================================= */
+
+@media (max-width: 700px) {
+  .hero {
+    min-height: 480px;
+    padding: 65px 7%;
+  }
+
+  .listing-hero,
+  .detail-hero {
+    padding: 65px 7%;
+  }
+
+  .listing-content,
+  .detail-content {
+    width: 90%;
+    padding: 45px 0;
+  }
+
+  .listing-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .category-image {
+    height: 190px;
+  }
+
+  .caterer-image {
+    height: 200px;
+  }
+}
+/* =================================
+   SOKOCATER BOOKING PAGE
+================================= */
+
+.page-container {
+  min-height: 100vh;
+  background: #faf9f5;
+  padding: 65px 20px 85px;
+}
+
+.page-container > h1 {
+  max-width: 750px;
+  margin: 0 auto 12px;
+  text-align: center;
+  color: #174c35;
+  font-family: "Playfair Display", serif;
+  font-size: clamp(32px, 5vw, 46px);
+}
+
+.page-container > p {
+  text-align: center;
+  color: #68756d;
+  margin-bottom: 35px;
+}
+
+.page-container form {
+  max-width: 700px;
+  margin: 0 auto;
+  padding: 38px;
+  background: white;
+  border-radius: 16px;
+  box-shadow: 0 10px 35px rgba(0, 0, 0, 0.07);
+}
+
+.page-container .form-group {
+  margin-bottom: 22px;
+}
+
+.page-container label {
+  display: block;
+  color: #285b42;
+  font-weight: 700;
+  margin-bottom: 9px;
+}
+
+.page-container input,
+.page-container select,
+.page-container textarea {
+  width: 100%;
+  padding: 13px 15px;
+  border: 1px solid #dce3dc;
+  border-radius: 8px;
+  background: #fff;
+  color: #26352e;
+  font: inherit;
+  outline: none;
+}
+
+.page-container input:focus,
+.page-container select:focus,
+.page-container textarea:focus {
+  border-color: #285b42;
+  box-shadow: 0 0 0 3px rgba(40, 91, 66, 0.1);
+}
+
+.page-container textarea {
+  min-height: 120px;
+  resize: vertical;
+}
+
+.page-container form button {
+  width: 100%;
+  padding: 15px;
+  border: none;
+  border-radius: 8px;
+  background: #174c35;
+  color: white;
+  font-weight: 700;
+  font-size: 16px;
+  transition: background 0.2s ease;
+}
+
+.page-container form button:hover {
+  background: #286b49;
+}
+
+@media (max-width: 600px) {
+  .page-container {
+    padding: 45px 15px;
+  }
+
+  .page-container form {
+    padding: 24px 18px;
+  }
+}
+
+.dashboard-button {
+  display: inline-block;
+  padding: 14px 25px;
+  border: 2px solid #ffc36b;
+  border-radius: 7px;
+  color: white;
+  font-weight: 700;
+  transition: all 0.2s ease;
+}
+
+.dashboard-button:hover {
+  background: #ffc36b;
+  color: #174c35;
+}
+
+@media (max-width: 600px) {
+  .hero-actions {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+}
+
+/* BUSINESS PROFILE FORM */
+
+.profile-panel {
+  max-width: 850px;
+}
+
+.business-profile-form {
+  margin-top: 25px;
+}
+
+.profile-form-group {
+  margin-bottom: 20px;
+}
+
+.profile-form-group label {
+  display: block;
+  margin-bottom: 8px;
+  color: #285b42;
+  font-weight: 700;
+}
+
+.profile-form-group input,
+.profile-form-group textarea {
+  width: 100%;
+  padding: 13px 15px;
+  border: 1px solid #dce3dc;
+  border-radius: 8px;
+  font: inherit;
+  background: white;
+  color: #26352e;
+}
+
+.profile-form-group input:focus,
+.profile-form-group textarea:focus {
+  outline: none;
+  border-color: #285b42;
+  box-shadow: 0 0 0 3px rgba(40, 91, 66, 0.1);
+}
+
+.profile-form-group textarea {
+  resize: vertical;
+}
+
+.save-profile-button {
+  padding: 14px 25px;
+  border: none;
+  border-radius: 8px;
+  background: #174c35;
+  color: white;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.save-profile-button:hover {
+  background: #286b49;
+}
+
+.profile-success {
+  margin-top: 15px;
+  color: #285b42;
+  font-weight: 700;
+}
