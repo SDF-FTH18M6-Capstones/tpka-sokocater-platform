@@ -22,6 +22,19 @@ caterers_schema = CatererSchema(many=True)
 def serialize_package(package):
     """Return package information together with its selected menu items."""
 
+    menu_items = [
+        {
+            "id": package_item.menu_item.id,
+            "menu_id": package_item.menu_item.menu_id,
+            "item_name": package_item.menu_item.item_name,
+            "description": package_item.menu_item.description,
+            "price": str(package_item.menu_item.price),
+            "image_url": package_item.menu_item.image_url
+        }
+        for package_item in package.package_items
+        if package_item.menu_item is not None
+    ]
+
     return {
         "id": package.id,
         "caterer_id": package.caterer_id,
@@ -30,20 +43,10 @@ def serialize_package(package):
         "price_per_guest": str(package.price_per_guest),
         "minimum_guests": package.minimum_guests,
         "maximum_guests": package.maximum_guests,
-        "menu_items": [
-            {
-                "id": package_item.menu_item.id,
-                "menu_id": package_item.menu_item.menu_id,
-                "item_name": package_item.menu_item.item_name,
-                "description": package_item.menu_item.description,
-                "price": str(package_item.menu_item.price),
-                "image_url": package_item.menu_item.image_url
-            }
-            for package_item in package.package_items
-            if package_item.menu_item is not None
-        ]
+        "menu_items": menu_items,
+        # alias for frontend that expects "menus"
+        "menus": menu_items,
     }
-
 
 def serialize_caterer(caterer, include_packages=False):
     """Serialize a caterer with its package price range."""
@@ -90,6 +93,35 @@ def get_caterers():
 
     query = Caterer.query
 
+    # YOUR FILTER - re-added
+    min_price = request.args.get("min_price")
+    max_price = request.args.get("max_price")
+
+    try:
+        min_price = float(min_price) if min_price is not None else None
+        max_price = float(max_price) if max_price is not None else None
+    except ValueError:
+        return jsonify({
+            "error": "min_price and max_price must be numbers"
+        }), 400
+
+    if min_price is not None and min_price < 0:
+        return jsonify({"error": "min_price cannot be negative"}), 400
+    if max_price is not None and max_price < 0:
+        return jsonify({"error": "max_price cannot be negative"}), 400
+    if min_price is not None and max_price is not None and min_price > max_price:
+        return jsonify({"error": "min_price cannot be greater than max_price"}), 400
+
+    if min_price is not None or max_price is not None:
+        from models import Package
+        query = query.join(Package, Package.caterer_id == Caterer.id)
+        if min_price is not None:
+            query = query.filter(Package.price_per_guest >= min_price)
+        if max_price is not None:
+            query = query.filter(Package.price_per_guest <= max_price)
+        query = query.distinct()
+
+    # KATE'S FILTER - keep as-is below this
     category = request.args.get("category")
 
     if category is not None:
