@@ -1,12 +1,21 @@
 
 import unittest
+from datetime import timedelta
+from decimal import Decimal
 
 from flask_jwt_extended import create_access_token
 from werkzeug.security import generate_password_hash
 
 from app import create_app
 from extensions import db
-from models import User, Caterer, Menu
+from models import (
+    User,
+    Caterer,
+    Menu,
+    Package,
+    MenuItem,
+    PackageItem
+)
 
 
 class TestCatererRoutes(unittest.TestCase):
@@ -122,6 +131,54 @@ class TestCatererRoutes(unittest.TestCase):
             "contact_number": "0712345678",
             "business_image": "https://example.com/image.jpg"
         }
+
+    def create_package(
+        self,
+        caterer,
+        package_name="Wedding Package",
+        price_per_guest="1500.00",
+        minimum_guests=50,
+        maximum_guests=200
+    ):
+        package = Package(
+            caterer_id=caterer.id,
+            package_name=package_name,
+            description="A catering package",
+            price_per_guest=Decimal(price_per_guest),
+            minimum_guests=minimum_guests,
+            maximum_guests=maximum_guests
+        )
+
+        db.session.add(package)
+        db.session.commit()
+
+        return package
+
+    def create_menu_item(
+        self,
+        caterer,
+        item_name="Chicken",
+        price="500.00"
+    ):
+        menu = Menu(
+            caterer_id=caterer.id,
+            menu_name="Wedding Menu"
+        )
+
+        db.session.add(menu)
+        db.session.flush()
+
+        menu_item = MenuItem(
+            menu_id=menu.id,
+            item_name=item_name,
+            description=f"{item_name} description",
+            price=Decimal(price)
+        )
+
+        db.session.add(menu_item)
+        db.session.commit()
+
+        return menu_item
 
     # ==================================================
     # PUBLIC GET ROUTES
@@ -481,7 +538,167 @@ class TestCatererRoutes(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
 
     # ==================================================
-    # INVALID JWT IDENTITY
+    # CATERER PACKAGES AND PRICE RANGE TESTS
+    # ==================================================
+
+    def test_caterer_detail_includes_packages(self):
+        caterer = self.create_caterer_profile()
+
+        self.create_package(
+            caterer,
+            package_name="Wedding Package",
+            price_per_guest="1500.00"
+        )
+
+        response = self.client.get(
+            f"/api/caterers/{caterer.id}"
+        )
+
+        self.assertEqual(response.status_code, 200)
+
+        data = response.get_json()["data"]
+
+        self.assertIn("packages", data)
+        self.assertEqual(len(data["packages"]), 1)
+
+        self.assertEqual(
+            data["packages"][0]["package_name"],
+            "Wedding Package"
+        )
+
+    def test_caterer_detail_includes_package_menu_items(self):
+        caterer = self.create_caterer_profile()
+
+        package = self.create_package(caterer)
+
+        menu_item = self.create_menu_item(
+            caterer,
+            item_name="Chicken"
+        )
+
+        db.session.add(
+            PackageItem(
+                package_id=package.id,
+                menu_item_id=menu_item.id
+            )
+        )
+
+        db.session.commit()
+
+        response = self.client.get(
+            f"/api/caterers/{caterer.id}"
+        )
+
+        self.assertEqual(response.status_code, 200)
+
+        data = response.get_json()["data"]
+
+        package_data = data["packages"][0]
+
+        self.assertEqual(
+            len(package_data["menu_items"]),
+            1
+        )
+
+        self.assertEqual(
+            package_data["menu_items"][0]["item_name"],
+            "Chicken"
+        )
+
+    def test_caterer_price_range_is_calculated_correctly(self):
+        caterer = self.create_caterer_profile()
+
+        self.create_package(
+            caterer,
+            package_name="Basic Package",
+            price_per_guest="1000.00"
+        )
+
+        self.create_package(
+            caterer,
+            package_name="Premium Package",
+            price_per_guest="3500.00"
+        )
+
+        self.create_package(
+            caterer,
+            package_name="Standard Package",
+            price_per_guest="2000.00"
+        )
+
+        response = self.client.get(
+            f"/api/caterers/{caterer.id}"
+        )
+
+        self.assertEqual(response.status_code, 200)
+
+        price_range = response.get_json()["data"]["price_range"]
+
+        self.assertEqual(
+            price_range["min_price"],
+            "1000.00"
+        )
+
+        self.assertEqual(
+            price_range["max_price"],
+            "3500.00"
+        )
+
+    def test_caterer_with_one_package_has_equal_min_and_max_price(self):
+        caterer = self.create_caterer_profile()
+
+        self.create_package(
+            caterer,
+            price_per_guest="2500.00"
+        )
+
+        response = self.client.get(
+            f"/api/caterers/{caterer.id}"
+        )
+
+        self.assertEqual(response.status_code, 200)
+
+        price_range = response.get_json()["data"]["price_range"]
+
+        self.assertEqual(
+            price_range["min_price"],
+            "2500.00"
+        )
+
+        self.assertEqual(
+            price_range["max_price"],
+            "2500.00"
+        )
+
+    def test_caterer_without_packages_returns_empty_package_list(self):
+        caterer = self.create_caterer_profile()
+
+        response = self.client.get(
+            f"/api/caterers/{caterer.id}"
+        )
+
+        self.assertEqual(response.status_code, 200)
+
+        data = response.get_json()["data"]
+
+        self.assertEqual(data["packages"], [])
+
+    def test_caterer_without_packages_returns_null_price_range(self):
+        caterer = self.create_caterer_profile()
+
+        response = self.client.get(
+            f"/api/caterers/{caterer.id}"
+        )
+
+        self.assertEqual(response.status_code, 200)
+
+        price_range = response.get_json()["data"]["price_range"]
+
+        self.assertIsNone(price_range["min_price"])
+        self.assertIsNone(price_range["max_price"])
+
+    # ==================================================
+    # INVALID JWT IDENTITY AND TOKEN TESTS
     # ==================================================
 
     def test_invalid_jwt_identity_is_rejected(self):
@@ -497,6 +714,36 @@ class TestCatererRoutes(unittest.TestCase):
             json=self.valid_profile_data(),
             headers={
                 "Authorization": f"Bearer {token}"
+            }
+        )
+
+        self.assertEqual(response.status_code, 401)
+
+    def test_invalid_token_is_rejected(self):
+        response = self.client.post(
+            "/api/caterers",
+            json=self.valid_profile_data(),
+            headers={
+                "Authorization": "Bearer invalid.jwt.token"
+            }
+        )
+
+        self.assertEqual(response.status_code, 422)
+
+    def test_expired_token_is_rejected(self):
+        expired_token = create_access_token(
+            identity=str(self.caterer_user.id),
+            additional_claims={
+                "role": "caterer"
+            },
+            expires_delta=timedelta(seconds=-1)
+        )
+
+        response = self.client.post(
+            "/api/caterers",
+            json=self.valid_profile_data(),
+            headers={
+                "Authorization": f"Bearer {expired_token}"
             }
         )
 
