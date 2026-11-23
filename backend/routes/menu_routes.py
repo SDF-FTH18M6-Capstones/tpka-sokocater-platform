@@ -1,4 +1,3 @@
-
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import (
     jwt_required,
@@ -12,12 +11,10 @@ from extensions import db
 from models import Menu, Caterer
 from schemas.menu_schema import MenuSchema
 
-
 menu_bp = Blueprint("menus", __name__)
 
 menu_schema = MenuSchema()
 menus_schema = MenuSchema(many=True)
-
 
 # ==================================================
 # HELPER FUNCTION
@@ -45,7 +42,6 @@ def get_current_caterer():
         user_id=user_id
     ).first()
 
-
 # ==================================================
 # GET ALL MENUS - PUBLIC
 # ==================================================
@@ -59,7 +55,6 @@ def get_menus():
         "message": "Menus retrieved successfully",
         "data": menus_schema.dump(menus)
     }), 200
-
 
 # ==================================================
 # GET SINGLE MENU - PUBLIC
@@ -78,7 +73,6 @@ def get_menu(menu_id):
     return jsonify({
         "data": menu_schema.dump(menu)
     }), 200
-
 
 # ==================================================
 # CREATE MENU - CATERER ONLY
@@ -104,16 +98,23 @@ def create_menu():
             "error": "Invalid JSON body"
         }), 400
 
+        # FIX: If client sends another caterer's id, reject it
+    if "caterer_id" in data and data["caterer_id"] != current_caterer.id:
+        return jsonify({
+            "error": "You can only create menus for your own profile"
+        }), 403
+
     try:
+        # Inject caterer_id from JWT BEFORE validation
+        data = dict(data)
+        data["caterer_id"] = current_caterer.id
         validated_data = menu_schema.load(data)
+        validated_data.pop("caterer_id", None)
 
-        # A caterer can only create menus for their own profile.
-        if validated_data["caterer_id"] != current_caterer.id:
-            return jsonify({
-                "error": "You can only create menus for your own profile"
-            }), 403
-
-        menu = Menu(**validated_data)
+        menu = Menu(
+            **validated_data,
+            caterer_id=current_caterer.id
+        )
 
         db.session.add(menu)
         db.session.commit()
@@ -134,7 +135,6 @@ def create_menu():
         return jsonify({
             "error": "Unable to create menu"
         }), 409
-
 
 # ==================================================
 # UPDATE MENU - OWNER ONLY
@@ -172,19 +172,18 @@ def update_menu(menu_id):
         }), 400
 
     try:
+        # FIX: Block ownership transfer up front
+        if "caterer_id" in data:
+            return jsonify({
+                "error": "You cannot transfer a menu to another caterer"
+            }), 403
+
         validated_data = menu_schema.load(
             data,
             partial=True
         )
 
-        # Prevent transferring ownership to another caterer.
-        if (
-            "caterer_id" in validated_data
-            and validated_data["caterer_id"] != current_caterer.id
-        ):
-            return jsonify({
-                "error": "You cannot transfer a menu to another caterer"
-            }), 403
+        validated_data.pop("caterer_id", None)
 
         for field, value in validated_data.items():
             setattr(menu, field, value)
@@ -207,7 +206,6 @@ def update_menu(menu_id):
         return jsonify({
             "error": "Unable to update menu"
         }), 409
-
 
 # ==================================================
 # DELETE MENU - OWNER ONLY
