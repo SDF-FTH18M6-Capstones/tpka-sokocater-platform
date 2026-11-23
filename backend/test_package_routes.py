@@ -1,10 +1,18 @@
 
 import unittest
+from datetime import timedelta
 from decimal import Decimal
 
 from app import create_app
 from extensions import db
-from models import User, Caterer, Package
+from models import (
+    User,
+    Caterer,
+    Package,
+    Menu,
+    MenuItem,
+    PackageItem
+)
 from flask_jwt_extended import create_access_token
 
 
@@ -25,7 +33,10 @@ class TestPackageRoutes(unittest.TestCase):
 
         db.create_all()
 
-        # Create customer user.
+        # ==========================================
+        # CREATE USERS
+        # ==========================================
+
         self.customer = User(
             full_name="Test Customer",
             email="customer@test.com",
@@ -33,7 +44,6 @@ class TestPackageRoutes(unittest.TestCase):
             role="customer"
         )
 
-        # Create first caterer user.
         self.caterer_user = User(
             full_name="Test Caterer",
             email="caterer@test.com",
@@ -41,7 +51,6 @@ class TestPackageRoutes(unittest.TestCase):
             role="caterer"
         )
 
-        # Create second caterer user.
         self.other_caterer_user = User(
             full_name="Other Caterer",
             email="other@test.com",
@@ -57,7 +66,10 @@ class TestPackageRoutes(unittest.TestCase):
 
         db.session.commit()
 
-        # Create caterer profiles.
+        # ==========================================
+        # CREATE CATERER PROFILES
+        # ==========================================
+
         self.caterer = Caterer(
             user_id=self.caterer_user.id,
             business_name="Test Catering",
@@ -79,7 +91,10 @@ class TestPackageRoutes(unittest.TestCase):
 
         db.session.commit()
 
-        # Create a package owned by the first caterer.
+        # ==========================================
+        # CREATE EXISTING PACKAGE
+        # ==========================================
+
         self.package = Package(
             caterer_id=self.caterer.id,
             package_name="Wedding Package",
@@ -92,7 +107,10 @@ class TestPackageRoutes(unittest.TestCase):
         db.session.add(self.package)
         db.session.commit()
 
-        # Generate authentication tokens.
+        # ==========================================
+        # CREATE JWT TOKENS
+        # ==========================================
+
         self.caterer_token = create_access_token(
             identity=str(self.caterer_user.id),
             additional_claims={"role": "caterer"}
@@ -120,6 +138,10 @@ class TestPackageRoutes(unittest.TestCase):
             "Authorization": f"Bearer {self.customer_token}"
         }
 
+        # ==========================================
+        # VALID PACKAGE DATA
+        # ==========================================
+
         self.valid_package_data = {
             "caterer_id": self.caterer.id,
             "package_name": "Birthday Package",
@@ -135,6 +157,33 @@ class TestPackageRoutes(unittest.TestCase):
         db.drop_all()
 
         self.app_context.pop()
+
+    # ==========================================
+    # HELPER: CREATE MENU ITEM
+    # ==========================================
+
+    def create_menu_item(self, caterer, item_name):
+
+        menu = Menu(
+            caterer_id=caterer.id,
+            menu_name=f"{item_name} Menu",
+            description="Test menu"
+        )
+
+        db.session.add(menu)
+        db.session.flush()
+
+        menu_item = MenuItem(
+            menu_id=menu.id,
+            item_name=item_name,
+            description=f"{item_name} description",
+            price=Decimal("250.00")
+        )
+
+        db.session.add(menu_item)
+        db.session.commit()
+
+        return menu_item
 
     # ==========================================
     # GET ALL PACKAGES
@@ -159,6 +208,7 @@ class TestPackageRoutes(unittest.TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
+
         self.assertEqual(
             response.json["data"]["package_name"],
             "Wedding Package"
@@ -183,6 +233,7 @@ class TestPackageRoutes(unittest.TestCase):
         )
 
         self.assertEqual(response.status_code, 201)
+
         self.assertEqual(
             response.json["data"]["package_name"],
             "Birthday Package"
@@ -193,6 +244,36 @@ class TestPackageRoutes(unittest.TestCase):
         response = self.client.post(
             "/api/packages",
             json=self.valid_package_data
+        )
+
+        self.assertEqual(response.status_code, 401)
+
+    def test_create_package_with_invalid_token(self):
+
+        response = self.client.post(
+            "/api/packages",
+            json=self.valid_package_data,
+            headers={
+                "Authorization": "Bearer invalid.jwt.token"
+            }
+        )
+
+        self.assertEqual(response.status_code, 422)
+
+    def test_create_package_with_expired_token(self):
+
+        expired_token = create_access_token(
+            identity=str(self.caterer_user.id),
+            additional_claims={"role": "caterer"},
+            expires_delta=timedelta(seconds=-1)
+        )
+
+        response = self.client.post(
+            "/api/packages",
+            json=self.valid_package_data,
+            headers={
+                "Authorization": f"Bearer {expired_token}"
+            }
         )
 
         self.assertEqual(response.status_code, 401)
@@ -280,6 +361,7 @@ class TestPackageRoutes(unittest.TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
+
         self.assertEqual(
             response.json["data"]["package_name"],
             "Updated Wedding Package"
@@ -354,6 +436,50 @@ class TestPackageRoutes(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
 
     # ==========================================
+    # ADDITIONAL PACKAGE UPDATE VALIDATION TESTS
+    # ==========================================
+
+    def test_update_minimum_guests_above_existing_maximum(self):
+
+        response = self.client.put(
+            f"/api/packages/{self.package.id}",
+            json={"minimum_guests": 250},
+            headers=self.caterer_headers
+        )
+
+        self.assertEqual(response.status_code, 400)
+
+        db.session.refresh(self.package)
+
+        self.assertEqual(self.package.minimum_guests, 20)
+        self.assertEqual(self.package.maximum_guests, 200)
+
+    def test_update_maximum_guests_below_existing_minimum(self):
+
+        response = self.client.put(
+            f"/api/packages/{self.package.id}",
+            json={"maximum_guests": 10},
+            headers=self.caterer_headers
+        )
+
+        self.assertEqual(response.status_code, 400)
+
+        db.session.refresh(self.package)
+
+        self.assertEqual(self.package.minimum_guests, 20)
+        self.assertEqual(self.package.maximum_guests, 200)
+
+    def test_update_package_with_empty_json(self):
+
+        response = self.client.put(
+            f"/api/packages/{self.package.id}",
+            json={},
+            headers=self.caterer_headers
+        )
+
+        self.assertEqual(response.status_code, 400)
+
+    # ==========================================
     # DELETE PACKAGE
     # ==========================================
 
@@ -407,6 +533,121 @@ class TestPackageRoutes(unittest.TestCase):
         )
 
         self.assertEqual(response.status_code, 404)
+
+    # ==========================================
+    # PACKAGE MENU ITEM TESTS
+    # ==========================================
+
+    def test_caterer_can_create_package_with_menu_items(self):
+
+        item1 = self.create_menu_item(
+            self.caterer,
+            "Pilau"
+        )
+
+        item2 = self.create_menu_item(
+            self.caterer,
+            "Chicken"
+        )
+
+        data = self.valid_package_data.copy()
+        data["menu_item_ids"] = [item1.id, item2.id]
+
+        response = self.client.post(
+            "/api/packages",
+            json=data,
+            headers=self.caterer_headers
+        )
+
+        self.assertEqual(response.status_code, 201)
+
+        returned_ids = {
+            item["id"]
+            for item in response.json["data"]["menu_items"]
+        }
+
+        self.assertEqual(
+            returned_ids,
+            {item1.id, item2.id}
+        )
+
+    def test_caterer_cannot_use_another_caterers_menu_item(self):
+
+        other_item = self.create_menu_item(
+            self.other_caterer,
+            "Beef Stew"
+        )
+
+        data = self.valid_package_data.copy()
+        data["menu_item_ids"] = [other_item.id]
+
+        response = self.client.post(
+            "/api/packages",
+            json=data,
+            headers=self.caterer_headers
+        )
+
+        self.assertEqual(response.status_code, 400)
+
+    def test_caterer_can_update_package_menu_items(self):
+
+        item1 = self.create_menu_item(
+            self.caterer,
+            "Pilau"
+        )
+
+        item2 = self.create_menu_item(
+            self.caterer,
+            "Chapati"
+        )
+
+        response = self.client.put(
+            f"/api/packages/{self.package.id}",
+            json={
+                "menu_item_ids": [item1.id, item2.id]
+            },
+            headers=self.caterer_headers
+        )
+
+        self.assertEqual(response.status_code, 200)
+
+        returned_ids = {
+            item["id"]
+            for item in response.json["data"]["menu_items"]
+        }
+
+        self.assertEqual(
+            returned_ids,
+            {item1.id, item2.id}
+        )
+
+    def test_caterer_can_clear_package_menu_items(self):
+
+        item = self.create_menu_item(
+            self.caterer,
+            "Rice"
+        )
+
+        initial_response = self.client.put(
+            f"/api/packages/{self.package.id}",
+            json={"menu_item_ids": [item.id]},
+            headers=self.caterer_headers
+        )
+
+        self.assertEqual(initial_response.status_code, 200)
+
+        response = self.client.put(
+            f"/api/packages/{self.package.id}",
+            json={"menu_item_ids": []},
+            headers=self.caterer_headers
+        )
+
+        self.assertEqual(response.status_code, 200)
+
+        self.assertEqual(
+            response.json["data"]["menu_items"],
+            []
+        )
 
 
 if __name__ == "__main__":

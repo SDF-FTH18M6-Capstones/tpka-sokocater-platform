@@ -2,7 +2,10 @@
 import unittest
 
 from flask_jwt_extended import decode_token
-from werkzeug.security import check_password_hash
+from werkzeug.security import (
+    check_password_hash,
+    generate_password_hash
+)
 
 from app import create_app
 from extensions import db
@@ -32,6 +35,10 @@ class TestAuthenticationRoutes(unittest.TestCase):
         db.drop_all()
         self.app_context.pop()
 
+    # ==================================================
+    # HELPER METHODS
+    # ==================================================
+
     def register_user(self, **overrides):
         data = {
             "full_name": "Test Customer",
@@ -60,11 +67,10 @@ class TestAuthenticationRoutes(unittest.TestCase):
 
         user = User(
             full_name=data["full_name"],
-            email=data["email"],
-            password_hash=__import__(
-                "werkzeug.security",
-                fromlist=["generate_password_hash"]
-            ).generate_password_hash(data["password"]),
+            email=data["email"].strip().lower(),
+            password_hash=generate_password_hash(
+                data["password"]
+            ),
             role=data["role"]
         )
 
@@ -73,7 +79,9 @@ class TestAuthenticationRoutes(unittest.TestCase):
 
         return user
 
+    # ==================================================
     # REGISTRATION TESTS
+    # ==================================================
 
     def test_customer_registration_successful(self):
         response = self.register_user()
@@ -157,6 +165,34 @@ class TestAuthenticationRoutes(unittest.TestCase):
 
         self.assertEqual(response.status_code, 409)
 
+    def test_registration_email_is_normalized(self):
+        response = self.register_user(
+            email="CUSTOMER@example.com"
+        )
+
+        self.assertEqual(response.status_code, 201)
+
+        user = User.query.filter_by(
+            email="customer@example.com"
+        ).first()
+
+        self.assertIsNotNone(user)
+
+    def test_registration_with_email_whitespace(self):
+        response = self.register_user(
+            email=" customer@example.com "
+        )
+
+        # This test expects the API to accept and normalize
+        # surrounding whitespace in email addresses.
+        self.assertEqual(response.status_code, 201)
+
+        user = User.query.filter_by(
+            email="customer@example.com"
+        ).first()
+
+        self.assertIsNotNone(user)
+
     def test_invalid_registration_data_is_rejected(self):
         response = self.register_user(
             full_name="A"
@@ -178,6 +214,27 @@ class TestAuthenticationRoutes(unittest.TestCase):
 
         self.assertEqual(response.status_code, 400)
 
+    def test_empty_password_is_rejected(self):
+        response = self.register_user(
+            password=""
+        )
+
+        self.assertEqual(response.status_code, 400)
+
+    def test_empty_email_is_rejected(self):
+        response = self.register_user(
+            email=""
+        )
+
+        self.assertEqual(response.status_code, 400)
+
+    def test_invalid_email_format_is_rejected(self):
+        response = self.register_user(
+            email="invalid-email"
+        )
+
+        self.assertEqual(response.status_code, 400)
+
     def test_registration_without_json_is_rejected(self):
         response = self.client.post(
             "/api/auth/register"
@@ -194,7 +251,22 @@ class TestAuthenticationRoutes(unittest.TestCase):
 
         self.assertEqual(response.status_code, 400)
 
+    def test_failed_registration_does_not_create_user(self):
+        response = self.register_user(
+            password="123"
+        )
+
+        self.assertEqual(response.status_code, 400)
+
+        user = User.query.filter_by(
+            email="customer@example.com"
+        ).first()
+
+        self.assertIsNone(user)
+
+    # ==================================================
     # LOGIN TESTS
+    # ==================================================
 
     def test_login_successful(self):
         self.create_user()
@@ -234,19 +306,38 @@ class TestAuthenticationRoutes(unittest.TestCase):
             }
         )
 
+        self.assertEqual(response.status_code, 200)
+
         token = response.get_json()["access_token"]
 
         decoded_token = decode_token(token)
 
+        user = User.query.filter_by(
+            email="customer@example.com"
+        ).first()
+
         self.assertEqual(
             decoded_token["sub"],
-            "1"
+            str(user.id)
         )
 
         self.assertEqual(
             decoded_token["role"],
             "customer"
         )
+
+    def test_login_with_different_email_capitalization(self):
+        self.create_user()
+
+        response = self.client.post(
+            "/api/auth/login",
+            json={
+                "email": "CUSTOMER@EXAMPLE.COM",
+                "password": "password123"
+            }
+        )
+
+        self.assertEqual(response.status_code, 200)
 
     def test_login_with_incorrect_password_is_rejected(self):
         self.create_user()
@@ -293,6 +384,30 @@ class TestAuthenticationRoutes(unittest.TestCase):
         response = self.client.post(
             "/api/auth/login",
             json={
+                "password": "password123"
+            }
+        )
+
+        self.assertEqual(response.status_code, 400)
+
+    def test_login_with_empty_password_is_rejected(self):
+        self.create_user()
+
+        response = self.client.post(
+            "/api/auth/login",
+            json={
+                "email": "customer@example.com",
+                "password": ""
+            }
+        )
+
+        self.assertEqual(response.status_code, 400)
+
+    def test_login_with_invalid_email_is_rejected(self):
+        response = self.client.post(
+            "/api/auth/login",
+            json={
+                "email": "invalid-email",
                 "password": "password123"
             }
         )

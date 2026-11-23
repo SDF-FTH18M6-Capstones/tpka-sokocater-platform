@@ -1,7 +1,7 @@
 
 import unittest
 
-from datetime import date
+from datetime import date, time
 from decimal import Decimal
 
 from sqlalchemy import event, inspect
@@ -13,6 +13,8 @@ from extensions import db
 from models import (
     User,
     CatererProfile,
+    Cuisine,
+    CatererCuisine,
     Menu,
     MenuItem,
     Package,
@@ -40,7 +42,6 @@ class TestSokoCaterModels(unittest.TestCase):
         self.app_context = self.app.app_context()
         self.app_context.push()
 
-        # Enable foreign key constraints in the test SQLite database.
         event.listen(
             db.engine,
             "connect",
@@ -154,7 +155,7 @@ class TestSokoCaterModels(unittest.TestCase):
         return booking
 
     # --------------------------------------------------
-    # TEST 1: ALL 13 MODELS CAN BE IMPORTED
+    # TEST 1: ALL 15 MODELS CAN BE IMPORTED
     # --------------------------------------------------
 
     def test_all_models_imported(self):
@@ -162,6 +163,8 @@ class TestSokoCaterModels(unittest.TestCase):
         model_classes = [
             User,
             CatererProfile,
+            Cuisine,
+            CatererCuisine,
             Menu,
             MenuItem,
             Package,
@@ -175,10 +178,10 @@ class TestSokoCaterModels(unittest.TestCase):
             Notification
         ]
 
-        self.assertEqual(len(model_classes), 13)
+        self.assertEqual(len(model_classes), 15)
 
     # --------------------------------------------------
-    # TEST 2: ALL 13 DATABASE TABLES ARE CREATED
+    # TEST 2: ALL 15 DATABASE TABLES ARE CREATED
     # --------------------------------------------------
 
     def test_all_tables_created(self):
@@ -188,6 +191,8 @@ class TestSokoCaterModels(unittest.TestCase):
         expected_tables = {
             "users",
             "caterer_profiles",
+            "cuisines",
+            "caterer_cuisines",
             "menus",
             "menu_items",
             "packages",
@@ -213,6 +218,26 @@ class TestSokoCaterModels(unittest.TestCase):
 
         caterer_user, caterer = self.create_sample_caterer()
         customer = self.create_sample_customer()
+
+        # Create cuisines.
+        kenyan = Cuisine(cuisine_name="Kenyan")
+        italian = Cuisine(cuisine_name="Italian")
+
+        db.session.add_all([kenyan, italian])
+        db.session.flush()
+
+        # Assign cuisines to caterer.
+        caterer_kenyan = CatererCuisine(
+            caterer_id=caterer.id,
+            cuisine_id=kenyan.id
+        )
+
+        caterer_italian = CatererCuisine(
+            caterer_id=caterer.id,
+            cuisine_id=italian.id
+        )
+
+        db.session.add_all([caterer_kenyan, caterer_italian])
 
         # Create menu and menu item.
         menu = Menu(
@@ -269,10 +294,12 @@ class TestSokoCaterModels(unittest.TestCase):
 
         db.session.add(booking_item)
 
-        # Create availability.
+        # Create availability time slot.
         availability = Availability(
             caterer_id=caterer.id,
             available_date=date(2027, 5, 20),
+            start_time=time(9, 0),
+            end_time=time(12, 0),
             status="available"
         )
 
@@ -313,11 +340,16 @@ class TestSokoCaterModels(unittest.TestCase):
         db.session.commit()
 
         # User and caterer profile.
-        self.assertEqual(
-            caterer_user.caterer_profile.id,
-            caterer.id
-        )
+        self.assertEqual(caterer_user.caterer_profile.id, caterer.id)
         self.assertEqual(caterer.user.id, caterer_user.id)
+
+        # Caterer and cuisines.
+        self.assertEqual(len(caterer.cuisines), 2)
+        self.assertEqual(caterer.cuisines[0].cuisine.cuisine_name, "Kenyan")
+        self.assertEqual(caterer.cuisines[1].cuisine.cuisine_name, "Italian")
+
+        # Cuisine and caterer relationship.
+        self.assertEqual(kenyan.caterers[0].caterer.id, caterer.id)
 
         # Caterer and menu.
         self.assertEqual(caterer.menus[0].menu_name, "Wedding Menu")
@@ -328,10 +360,7 @@ class TestSokoCaterModels(unittest.TestCase):
         self.assertEqual(menu_item.menu.id, menu.id)
 
         # Caterer and package.
-        self.assertEqual(
-            caterer.packages[0].package_name,
-            "Wedding Package"
-        )
+        self.assertEqual(caterer.packages[0].package_name, "Wedding Package")
         self.assertEqual(package.caterer.id, caterer.id)
 
         # Package and package item.
@@ -360,10 +389,7 @@ class TestSokoCaterModels(unittest.TestCase):
         self.assertEqual(booking_item.package.id, package.id)
 
         # Caterer and availability.
-        self.assertEqual(
-            caterer.availability_records[0].id,
-            availability.id
-        )
+        self.assertEqual(caterer.availability_records[0].id, availability.id)
         self.assertEqual(availability.caterer.id, caterer.id)
 
         # Booking and payment.
@@ -382,14 +408,125 @@ class TestSokoCaterModels(unittest.TestCase):
         self.assertEqual(review.booking.id, booking.id)
 
         # User and notification.
-        self.assertEqual(
-            customer.notifications[0].id,
-            notification.id
-        )
+        self.assertEqual(customer.notifications[0].id, notification.id)
         self.assertEqual(notification.user.id, customer.id)
 
     # --------------------------------------------------
-    # TEST 4: FOREIGN KEY CONSTRAINTS
+    # TEST 4: CATERER CAN HAVE MULTIPLE CUISINES
+    # --------------------------------------------------
+
+    def test_caterer_can_have_multiple_cuisines(self):
+
+        user, caterer = self.create_sample_caterer()
+
+        kenyan = Cuisine(cuisine_name="Kenyan")
+        indian = Cuisine(cuisine_name="Indian")
+        chinese = Cuisine(cuisine_name="Chinese")
+
+        db.session.add_all([kenyan, indian, chinese])
+        db.session.flush()
+
+        assignments = [
+            CatererCuisine(
+                caterer_id=caterer.id,
+                cuisine_id=kenyan.id
+            ),
+            CatererCuisine(
+                caterer_id=caterer.id,
+                cuisine_id=indian.id
+            ),
+            CatererCuisine(
+                caterer_id=caterer.id,
+                cuisine_id=chinese.id
+            )
+        ]
+
+        db.session.add_all(assignments)
+        db.session.commit()
+
+        self.assertEqual(len(caterer.cuisines), 3)
+
+    # --------------------------------------------------
+    # TEST 5: ONE CUISINE CAN BELONG TO MULTIPLE CATERERS
+    # --------------------------------------------------
+
+    def test_cuisine_can_belong_to_multiple_caterers(self):
+
+        user1, caterer1 = self.create_sample_caterer()
+
+        user2 = User(
+            full_name="Second Caterer",
+            email="second@example.com",
+            password_hash="hashed_password",
+            role="caterer"
+        )
+
+        db.session.add(user2)
+        db.session.flush()
+
+        caterer2 = CatererProfile(
+            user_id=user2.id,
+            business_name="Second Catering Business",
+            location="Nairobi",
+            verification_status="pending"
+        )
+
+        db.session.add(caterer2)
+        db.session.flush()
+
+        kenyan = Cuisine(cuisine_name="Kenyan")
+        db.session.add(kenyan)
+        db.session.flush()
+
+        assignment1 = CatererCuisine(
+            caterer_id=caterer1.id,
+            cuisine_id=kenyan.id
+        )
+
+        assignment2 = CatererCuisine(
+            caterer_id=caterer2.id,
+            cuisine_id=kenyan.id
+        )
+
+        db.session.add_all([assignment1, assignment2])
+        db.session.commit()
+
+        self.assertEqual(len(kenyan.caterers), 2)
+
+    # --------------------------------------------------
+    # TEST 6: DUPLICATE CATERER CUISINE IS REJECTED
+    # --------------------------------------------------
+
+    def test_duplicate_caterer_cuisine_rejected(self):
+
+        user, caterer = self.create_sample_caterer()
+
+        kenyan = Cuisine(cuisine_name="Kenyan")
+        db.session.add(kenyan)
+        db.session.flush()
+
+        first_assignment = CatererCuisine(
+            caterer_id=caterer.id,
+            cuisine_id=kenyan.id
+        )
+
+        db.session.add(first_assignment)
+        db.session.commit()
+
+        duplicate_assignment = CatererCuisine(
+            caterer_id=caterer.id,
+            cuisine_id=kenyan.id
+        )
+
+        db.session.add(duplicate_assignment)
+
+        with self.assertRaises(IntegrityError):
+            db.session.commit()
+
+        db.session.rollback()
+
+    # --------------------------------------------------
+    # TEST 7: FOREIGN KEY CONSTRAINTS
     # --------------------------------------------------
 
     def test_foreign_key_constraint(self):
@@ -408,7 +545,7 @@ class TestSokoCaterModels(unittest.TestCase):
         db.session.rollback()
 
     # --------------------------------------------------
-    # TEST 5: USER EMAIL MUST BE UNIQUE
+    # TEST 8: USER EMAIL MUST BE UNIQUE
     # --------------------------------------------------
 
     def test_unique_email_constraint(self):
@@ -438,7 +575,7 @@ class TestSokoCaterModels(unittest.TestCase):
         db.session.rollback()
 
     # --------------------------------------------------
-    # TEST 6: ONE CATERER PROFILE PER USER
+    # TEST 9: ONE CATERER PROFILE PER USER
     # --------------------------------------------------
 
     def test_one_caterer_per_user(self):
@@ -461,7 +598,7 @@ class TestSokoCaterModels(unittest.TestCase):
         db.session.rollback()
 
     # --------------------------------------------------
-    # TEST 7: INVALID USER ROLE IS REJECTED
+    # TEST 10: INVALID USER ROLE IS REJECTED
     # --------------------------------------------------
 
     def test_invalid_user_role_rejected(self):
@@ -481,7 +618,7 @@ class TestSokoCaterModels(unittest.TestCase):
         db.session.rollback()
 
     # --------------------------------------------------
-    # TEST 8: NEGATIVE MENU ITEM PRICE IS REJECTED
+    # TEST 11: NEGATIVE MENU ITEM PRICE IS REJECTED
     # --------------------------------------------------
 
     def test_negative_menu_item_price_rejected(self):
@@ -510,7 +647,7 @@ class TestSokoCaterModels(unittest.TestCase):
         db.session.rollback()
 
     # --------------------------------------------------
-    # TEST 9: NEGATIVE PACKAGE PRICE IS REJECTED
+    # TEST 12: NEGATIVE PACKAGE PRICE IS REJECTED
     # --------------------------------------------------
 
     def test_negative_package_price_rejected(self):
@@ -532,7 +669,7 @@ class TestSokoCaterModels(unittest.TestCase):
         db.session.rollback()
 
     # --------------------------------------------------
-    # TEST 10: PACKAGE MINIMUM GUEST COUNT MUST BE POSITIVE
+    # TEST 13: PACKAGE MINIMUM GUEST COUNT MUST BE POSITIVE
     # --------------------------------------------------
 
     def test_invalid_package_minimum_guests_rejected(self):
@@ -554,7 +691,7 @@ class TestSokoCaterModels(unittest.TestCase):
         db.session.rollback()
 
     # --------------------------------------------------
-    # TEST 11: MAXIMUM GUESTS CANNOT BE LESS THAN MINIMUM
+    # TEST 14: MAXIMUM GUESTS CANNOT BE LESS THAN MINIMUM
     # --------------------------------------------------
 
     def test_invalid_package_guest_range_rejected(self):
@@ -577,7 +714,7 @@ class TestSokoCaterModels(unittest.TestCase):
         db.session.rollback()
 
     # --------------------------------------------------
-    # TEST 12: BOOKING GUEST COUNT MUST BE POSITIVE
+    # TEST 15: BOOKING GUEST COUNT MUST BE POSITIVE
     # --------------------------------------------------
 
     def test_invalid_booking_guest_count_rejected(self):
@@ -604,7 +741,7 @@ class TestSokoCaterModels(unittest.TestCase):
         db.session.rollback()
 
     # --------------------------------------------------
-    # TEST 13: BOOKING ITEM QUANTITY MUST BE POSITIVE
+    # TEST 16: BOOKING ITEM QUANTITY MUST BE POSITIVE
     # --------------------------------------------------
 
     def test_invalid_booking_item_quantity_rejected(self):
@@ -631,7 +768,7 @@ class TestSokoCaterModels(unittest.TestCase):
         db.session.rollback()
 
     # --------------------------------------------------
-    # TEST 14: BOOKING ITEM MUST HAVE PACKAGE OR ADD-ON
+    # TEST 17: BOOKING ITEM MUST HAVE PACKAGE OR ADD-ON
     # --------------------------------------------------
 
     def test_booking_item_requires_package_or_addon(self):
@@ -657,7 +794,7 @@ class TestSokoCaterModels(unittest.TestCase):
         db.session.rollback()
 
     # --------------------------------------------------
-    # TEST 15: AVAILABILITY STATUS MUST BE VALID
+    # TEST 18: AVAILABILITY STATUS MUST BE VALID
     # --------------------------------------------------
 
     def test_invalid_availability_status_rejected(self):
@@ -667,6 +804,8 @@ class TestSokoCaterModels(unittest.TestCase):
         availability = Availability(
             caterer_id=caterer.id,
             available_date=date(2027, 5, 20),
+            start_time=time(9, 0),
+            end_time=time(12, 0),
             status="invalid"
         )
 
@@ -678,22 +817,61 @@ class TestSokoCaterModels(unittest.TestCase):
         db.session.rollback()
 
     # --------------------------------------------------
-    # TEST 16: CATERER CANNOT HAVE DUPLICATE AVAILABILITY DATE
+    # TEST 19: MULTIPLE SLOTS ARE ALLOWED ON SAME DATE
     # --------------------------------------------------
 
-    def test_unique_caterer_availability_date(self):
+    def test_multiple_availability_slots_allowed_on_same_date(self):
 
         user, caterer = self.create_sample_caterer()
 
         first = Availability(
             caterer_id=caterer.id,
             available_date=date(2027, 5, 20),
+            start_time=time(9, 0),
+            end_time=time(12, 0),
             status="available"
         )
 
         second = Availability(
             caterer_id=caterer.id,
             available_date=date(2027, 5, 20),
+            start_time=time(14, 0),
+            end_time=time(17, 0),
+            status="available"
+        )
+
+        db.session.add_all([first, second])
+        db.session.commit()
+
+        self.assertEqual(
+            Availability.query.filter_by(
+                caterer_id=caterer.id,
+                available_date=date(2027, 5, 20)
+            ).count(),
+            2
+        )
+
+    # --------------------------------------------------
+    # TEST 20: EXACT DUPLICATE AVAILABILITY SLOT IS REJECTED
+    # --------------------------------------------------
+
+    def test_duplicate_availability_slot_rejected(self):
+
+        user, caterer = self.create_sample_caterer()
+
+        first = Availability(
+            caterer_id=caterer.id,
+            available_date=date(2027, 5, 20),
+            start_time=time(9, 0),
+            end_time=time(12, 0),
+            status="available"
+        )
+
+        second = Availability(
+            caterer_id=caterer.id,
+            available_date=date(2027, 5, 20),
+            start_time=time(9, 0),
+            end_time=time(12, 0),
             status="unavailable"
         )
 
@@ -708,7 +886,75 @@ class TestSokoCaterModels(unittest.TestCase):
         db.session.rollback()
 
     # --------------------------------------------------
-    # TEST 17: PAYMENT AMOUNT CANNOT BE NEGATIVE
+    # TEST 21: INVALID AVAILABILITY TIME RANGE IS REJECTED
+    # --------------------------------------------------
+
+    def test_invalid_availability_time_range_rejected(self):
+
+        user, caterer = self.create_sample_caterer()
+
+        availability = Availability(
+            caterer_id=caterer.id,
+            available_date=date(2027, 5, 20),
+            start_time=time(17, 0),
+            end_time=time(9, 0),
+            status="available"
+        )
+
+        db.session.add(availability)
+
+        with self.assertRaises(IntegrityError):
+            db.session.commit()
+
+        db.session.rollback()
+
+    # --------------------------------------------------
+    # TEST 22: BOOKING TIMES MUST BE BOTH NULL OR VALID
+    # --------------------------------------------------
+
+    def test_booking_time_range_constraint(self):
+
+        user, caterer = self.create_sample_caterer()
+        customer = self.create_sample_customer()
+
+        booking = Booking(
+            customer_id=customer.id,
+            caterer_id=caterer.id,
+            event_date=date(2027, 6, 10),
+            event_start_time=time(17, 0),
+            event_end_time=time(9, 0),
+            event_type="Birthday",
+            event_location="Nairobi",
+            guest_count=20,
+            estimated_total=Decimal("20000.00"),
+            status="pending"
+        )
+
+        db.session.add(booking)
+
+        with self.assertRaises(IntegrityError):
+            db.session.commit()
+
+        db.session.rollback()
+
+    # --------------------------------------------------
+    # TEST 23: LEGACY BOOKINGS CAN HAVE NULL EVENT TIMES
+    # --------------------------------------------------
+
+    def test_legacy_booking_can_have_null_event_times(self):
+
+        user, caterer = self.create_sample_caterer()
+        customer = self.create_sample_customer()
+
+        booking = self.create_sample_booking(customer, caterer)
+
+        db.session.commit()
+
+        self.assertIsNone(booking.event_start_time)
+        self.assertIsNone(booking.event_end_time)
+
+    # --------------------------------------------------
+    # TEST 24: PAYMENT AMOUNT CANNOT BE NEGATIVE
     # --------------------------------------------------
 
     def test_negative_payment_amount_rejected(self):
@@ -733,7 +979,7 @@ class TestSokoCaterModels(unittest.TestCase):
         db.session.rollback()
 
     # --------------------------------------------------
-    # TEST 18: REVIEW RATING MUST BE BETWEEN 1 AND 5
+    # TEST 25: REVIEW RATING MUST BE BETWEEN 1 AND 5
     # --------------------------------------------------
 
     def test_invalid_review_rating_rejected(self):
@@ -759,7 +1005,7 @@ class TestSokoCaterModels(unittest.TestCase):
         db.session.rollback()
 
     # --------------------------------------------------
-    # TEST 19: REVIEW BOOKING ID MUST BE UNIQUE
+    # TEST 26: REVIEW BOOKING ID MUST BE UNIQUE
     # --------------------------------------------------
 
     def test_one_review_per_booking(self):
