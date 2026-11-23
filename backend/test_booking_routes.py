@@ -198,6 +198,8 @@ class TestBookingRoutes(unittest.TestCase):
             "caterer_id": self.caterer.id,
             "package_id": self.package.id,
             "event_date": "2027-08-20",
+            "event_start_time": "10:00:00",
+            "event_end_time": "14:00:00",
             "event_type": "Birthday",
             "event_location": "Nairobi",
             "guest_count": 40
@@ -239,6 +241,46 @@ class TestBookingRoutes(unittest.TestCase):
         response = self.client.get("/api/bookings")
 
         self.assertEqual(response.status_code, 401)
+
+    def test_invalid_token_is_rejected(self):
+
+        response = self.client.get(
+            "/api/bookings",
+            headers={
+                "Authorization": "Bearer invalid.jwt.token"
+            }
+        )
+
+        self.assertEqual(response.status_code, 422)
+
+    def test_expired_token_is_rejected(self):
+
+        expired_token = create_access_token(
+            identity=str(self.customer.id),
+            additional_claims={"role": "customer"},
+            expires_delta=timedelta(seconds=-1)
+        )
+
+        response = self.client.get(
+            "/api/bookings",
+            headers={
+                "Authorization": f"Bearer {expired_token}"
+            }
+        )
+
+        self.assertEqual(response.status_code, 401)
+
+    def test_token_with_outdated_role_is_rejected(self):
+
+        self.customer.role = "admin"
+        db.session.commit()
+
+        response = self.client.get(
+            "/api/bookings",
+            headers=self.customer_headers
+        )
+
+        self.assertEqual(response.status_code, 404)
 
     def test_admin_cannot_view_all_bookings(self):
 

@@ -1,12 +1,13 @@
 from decimal import Decimal
 
 from flask import Blueprint, jsonify, request
-from flask_jwt_extended import jwt_required, get_jwt_identity, get_jwt
+from flask_jwt_extended import jwt_required
 from sqlalchemy.exc import IntegrityError
 from marshmallow import ValidationError
 
 from extensions import db
 from models import Booking, BookingItem, User, Caterer, Package
+from auth_utils import get_authenticated_user
 from schemas.booking_schema import BookingSchema
 
 
@@ -35,14 +36,8 @@ ALLOWED_STATUS_TRANSITIONS = {
 # --------------------------------------------------
 
 def get_current_user():
-    """Return the currently authenticated user."""
-
-    try:
-        user_id = int(get_jwt_identity())
-    except (TypeError, ValueError):
-        return None
-
-    return db.session.get(User, user_id)
+    """Return the authenticated user with a verified database role."""
+    return get_authenticated_user()
 
 
 def get_booking_total(booking_id):
@@ -118,7 +113,7 @@ def get_bookings():
             "error": "User not found."
         }), 404
 
-    role = get_jwt().get("role")
+    role = user.role
 
     if role == "customer":
 
@@ -166,7 +161,7 @@ def get_booking(booking_id):
             "error": "User not found."
         }), 404
 
-    role = get_jwt().get("role")
+    role = user.role
 
     booking = db.session.get(Booking, booking_id)
 
@@ -224,7 +219,7 @@ def create_booking():
             "error": "User not found."
         }), 404
 
-    role = get_jwt().get("role")
+    role = user.role
 
     if role != "customer":
         return jsonify({
@@ -339,7 +334,7 @@ def update_booking(booking_id):
             "error": "User not found."
         }), 404
 
-    role = get_jwt().get("role")
+    role = user.role
 
     booking = db.session.get(Booking, booking_id)
 
@@ -614,7 +609,7 @@ def delete_booking(booking_id):
             "error": "User not found."
         }), 404
 
-    role = get_jwt().get("role")
+    role = user.role
 
     if role != "customer":
         return jsonify({

@@ -1,48 +1,130 @@
 from flask import Blueprint, jsonify, request
-from flask_jwt_extended import (
-    jwt_required,
-    get_jwt_identity,
-    get_jwt
-)
+from flask_jwt_extended import jwt_required
 from sqlalchemy.exc import IntegrityError
 from marshmallow import ValidationError
 
 from extensions import db
-from models import Package, Caterer
+from models import Package, Caterer, Menu, MenuItem, PackageItem
+from auth_utils import get_authenticated_user
 from schemas.package_schema import PackageSchema
+
 
 package_bp = Blueprint("packages", __name__)
 
 package_schema = PackageSchema()
 packages_schema = PackageSchema(many=True)
 
-# ==================================================
-# HELPER FUNCTION
-# ==================================================
+
+# --------------------------------------------------
+# HELPER FUNCTIONS
+# --------------------------------------------------
 
 def get_current_caterer():
-    """
-    Get the caterer profile belonging to the logged-in user.
-    Only users with the caterer role can manage packages.
-    """
+    """Get the caterer profile belonging to the authenticated user."""
 
-    claims = get_jwt()
+    user = get_authenticated_user()
 
-    if claims.get("role") != "caterer":
-        return None
-
-    try:
-        user_id = int(get_jwt_identity())
-    except (TypeError, ValueError):
+    if user is None or user.role != "caterer":
         return None
 
     return Caterer.query.filter_by(
-        user_id=user_id
+        user_id=user.id
     ).first()
 
-# ==================================================
+
+def serialize_package(package):
+    """Serialize a package, including its selected menu items."""
+
+    package_data = package_schema.dump(package)
+
+    package_data["menu_items"] = [
+        {
+            "id": package_item.menu_item.id,
+            "menu_id": package_item.menu_item.menu_id,
+            "item_name": package_item.menu_item.item_name,
+            "description": package_item.menu_item.description,
+            "price": str(package_item.menu_item.price),
+            "image_url": package_item.menu_item.image_url
+        }
+        for package_item in package.package_items
+        if package_item.menu_item is not None
+    ]
+
+    return package_data
+
+
+def validate_menu_item_ids(menu_item_ids, caterer_id):
+    """
+    Validate that menu item IDs are unique positive integers
+    and that every selected menu item belongs to this caterer.
+    """
+
+    if not isinstance(menu_item_ids, list):
+        raise ValidationError({
+            "menu_item_ids": ["Must be a list of menu item IDs."]
+        })
+
+    if any(
+        isinstance(item_id, bool)
+        or not isinstance(item_id, int)
+        or item_id < 1
+        for item_id in menu_item_ids
+    ):
+        raise ValidationError({
+            "menu_item_ids": [
+                "Every menu item ID must be a positive integer."
+            ]
+        })
+
+    if len(menu_item_ids) != len(set(menu_item_ids)):
+        raise ValidationError({
+            "menu_item_ids": [
+                "Duplicate menu item IDs are not allowed."
+            ]
+        })
+
+    if not menu_item_ids:
+        return []
+
+    menu_items = (
+        MenuItem.query
+        .join(Menu, MenuItem.menu_id == Menu.id)
+        .filter(
+            MenuItem.id.in_(menu_item_ids),
+            Menu.caterer_id == caterer_id
+        )
+        .all()
+    )
+
+    if len(menu_items) != len(menu_item_ids):
+        raise ValidationError({
+            "menu_item_ids": [
+                "One or more menu items do not exist or do not belong to your catering profile."
+            ]
+        })
+
+    return menu_items
+
+
+def replace_package_menu_items(package, menu_items):
+    """Replace the menu item associations for a package."""
+
+    PackageItem.query.filter_by(
+        package_id=package.id
+    ).delete(synchronize_session=False)
+
+    for menu_item in menu_items:
+        db.session.add(
+            PackageItem(
+                package_id=package.id,
+                menu_item_id=menu_item.id
+            )
+        )
+
+
+# --------------------------------------------------
 # GET ALL PACKAGES - PUBLIC
-# ==================================================
+# --------------------------------------------------
 
 @package_bp.route("/api/packages", methods=["GET"])
 def get_packages():
@@ -51,12 +133,16 @@ def get_packages():
 
     return jsonify({
         "message": "Packages retrieved successfully",
-        "data": packages_schema.dump(packages)
+        "data": [
+            serialize_package(package)
+            for package in packages
+        ]
     }), 200
 
-# ==================================================
+
+# --------------------------------------------------
 # GET SINGLE PACKAGE - PUBLIC
-# ==================================================
+# --------------------------------------------------
 
 @package_bp.route("/api/packages/<int:package_id>", methods=["GET"])
 def get_package(package_id):
@@ -69,12 +155,13 @@ def get_package(package_id):
         }), 404
 
     return jsonify({
-        "data": package_schema.dump(package)
+        "data": serialize_package(package)
     }), 200
 
-# ==================================================
+
+# --------------------------------------------------
 # CREATE PACKAGE - CATERER ONLY
-# ==================================================
+# --------------------------------------------------
 
 @package_bp.route("/api/packages", methods=["POST"])
 @jwt_required()
@@ -94,18 +181,33 @@ def create_package():
             "error": "Invalid JSON body"
         }), 400
 
-        # FIX: If client sends another caterer's id, reject it
-    if "caterer_id" in data and data["caterer_id"] != current_caterer.id:
+    data = dict(data)
+
+    # A caterer cannot create a package for another caterer.
+    if (
+        "caterer_id" in data
+        and data["caterer_id"] != current_caterer.id
+    ):
         return jsonify({
             "error": "You can only create packages for your own profile"
         }), 403
 
     try:
-        # Inject caterer_id from JWT BEFORE validation
-        data = dict(data)
+        # Remove menu item IDs before Marshmallow validation.
+        menu_item_ids = data.pop("menu_item_ids", [])
+
+        # Use the authenticated caterer's ID, not the client's value.
         data["caterer_id"] = current_caterer.id
+
         validated_data = package_schema.load(data)
+
+        # The owner is explicitly assigned below.
         validated_data.pop("caterer_id", None)
+
+        menu_items = validate_menu_item_ids(
+            menu_item_ids,
+            current_caterer.id
+        )
 
         package = Package(
             **validated_data,
@@ -113,11 +215,15 @@ def create_package():
         )
 
         db.session.add(package)
+        db.session.flush()
+
+        replace_package_menu_items(package, menu_items)
+
         db.session.commit()
 
         return jsonify({
             "message": "Package created successfully",
-            "data": package_schema.dump(package)
+            "data": serialize_package(package)
         }), 201
 
     except ValidationError as error:
@@ -134,9 +240,10 @@ def create_package():
             "error": "Unable to create package"
         }), 409
 
-# ==================================================
+
+# --------------------------------------------------
 # UPDATE PACKAGE - OWNER ONLY
-# ==================================================
+# --------------------------------------------------
 
 @package_bp.route("/api/packages/<int:package_id>", methods=["PUT"])
 @jwt_required()
@@ -156,7 +263,6 @@ def update_package(package_id):
             "error": "Package not found"
         }), 404
 
-    # Verify that the package belongs to the logged-in caterer.
     if package.caterer_id != current_caterer.id:
         return jsonify({
             "error": "You can only update your own packages"
@@ -169,18 +275,23 @@ def update_package(package_id):
             "error": "Invalid JSON body"
         }), 400
 
-    # Reject empty update requests.
     if not data:
         return jsonify({
             "error": "No fields provided for update"
         }), 400
 
+    data = dict(data)
+
+    # Never allow a package to be transferred to another caterer.
+    if "caterer_id" in data:
+        return jsonify({
+            "error": "You cannot transfer a package to another caterer"
+        }), 403
+
     try:
-        # FIX: Block ownership transfer up front
-        if "caterer_id" in data:
-            return jsonify({
-                "error": "You cannot transfer a package to another caterer"
-            }), 403
+        # Menu items are optional during a package update.
+        menu_items_provided = "menu_item_ids" in data
+        menu_item_ids = data.pop("menu_item_ids", None)
 
         validated_data = package_schema.load(
             data,
@@ -190,7 +301,6 @@ def update_package(package_id):
         validated_data.pop("caterer_id", None)
 
         # Validate the combined guest range.
-        # Use submitted values when provided and existing values otherwise.
         new_minimum_guests = validated_data.get(
             "minimum_guests",
             package.minimum_guests
@@ -213,15 +323,25 @@ def update_package(package_id):
                 }
             }), 400
 
-        # Apply validated changes only after all checks pass.
+        menu_items = None
+
+        if menu_items_provided:
+            menu_items = validate_menu_item_ids(
+                menu_item_ids,
+                current_caterer.id
+            )
+
         for field, value in validated_data.items():
             setattr(package, field, value)
+
+        if menu_items_provided:
+            replace_package_menu_items(package, menu_items)
 
         db.session.commit()
 
         return jsonify({
             "message": "Package updated successfully",
-            "data": package_schema.dump(package)
+            "data": serialize_package(package)
         }), 200
 
     except ValidationError as error:
@@ -238,9 +358,10 @@ def update_package(package_id):
             "error": "Unable to update package"
         }), 409
 
-# ==================================================
+
+# --------------------------------------------------
 # DELETE PACKAGE - OWNER ONLY
-# ==================================================
+# --------------------------------------------------
 
 @package_bp.route("/api/packages/<int:package_id>", methods=["DELETE"])
 @jwt_required()
@@ -260,7 +381,6 @@ def delete_package(package_id):
             "error": "Package not found"
         }), 404
 
-    # Verify package ownership.
     if package.caterer_id != current_caterer.id:
         return jsonify({
             "error": "You can only delete your own packages"

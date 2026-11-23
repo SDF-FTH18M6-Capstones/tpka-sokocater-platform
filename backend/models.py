@@ -32,14 +32,14 @@ class User(db.Model):
         ),
     )
 
-    # One user can have one caterer profile
+    # One user can have one caterer profile.
     caterer_profile = db.relationship(
         "CatererProfile",
         back_populates="user",
         uselist=False
     )
 
-    # One customer can make many bookings
+    # One customer can make many bookings.
     bookings = db.relationship(
         "Booking",
         back_populates="customer",
@@ -79,6 +79,7 @@ class CatererProfile(db.Model):
     contact_number = db.Column(db.String(20))
     business_image = db.Column(db.String(255))
     verification_status = db.Column(db.String(20), nullable=False)
+
     created_at = db.Column(
         db.DateTime,
         nullable=False,
@@ -120,7 +121,7 @@ class CatererProfile(db.Model):
         back_populates="caterer"
     )
 
-    # One caterer can offer multiple cuisines
+    # One caterer can offer multiple cuisines.
     cuisines = db.relationship(
         "CatererCuisine",
         back_populates="caterer"
@@ -135,13 +136,14 @@ class Cuisine(db.Model):
     __tablename__ = "cuisines"
 
     id = db.Column(db.Integer, primary_key=True)
+
     cuisine_name = db.Column(
         db.String(100),
         unique=True,
         nullable=False
     )
 
-    # One cuisine can be offered by multiple caterers
+    # One cuisine can be offered by multiple caterers.
     caterers = db.relationship(
         "CatererCuisine",
         back_populates="cuisine"
@@ -169,7 +171,7 @@ class CatererCuisine(db.Model):
         nullable=False
     )
 
-    # A caterer cannot be assigned the same cuisine twice
+    # A caterer cannot be assigned the same cuisine twice.
     __table_args__ = (
         UniqueConstraint(
             "caterer_id",
@@ -206,6 +208,7 @@ class Menu(db.Model):
 
     menu_name = db.Column(db.String(100), nullable=False)
     description = db.Column(db.Text)
+
     created_at = db.Column(
         db.DateTime,
         nullable=False,
@@ -412,11 +415,23 @@ class Booking(db.Model):
     )
 
     event_date = db.Column(db.Date, nullable=False)
+
+    # Nullable to preserve historical bookings that have no times.
+    # New bookings must provide both times through the API.
+    event_start_time = db.Column(db.Time, nullable=True)
+    event_end_time = db.Column(db.Time, nullable=True)
+
     event_type = db.Column(db.String(100), nullable=False)
     event_location = db.Column(db.String(200), nullable=False)
     guest_count = db.Column(db.Integer, nullable=False)
     estimated_total = db.Column(db.Numeric(10, 2), nullable=False)
-    status = db.Column(db.String(20), nullable=False, default="pending")
+
+    status = db.Column(
+        db.String(20),
+        nullable=False,
+        default="pending"
+    )
+
     created_at = db.Column(
         db.DateTime,
         nullable=False,
@@ -436,6 +451,13 @@ class Booking(db.Model):
             "status IN ('pending', 'accepted', 'rejected', "
             "'confirmed', 'cancelled', 'completed')",
             name="check_booking_status"
+        ),
+        CheckConstraint(
+            "(event_start_time IS NULL AND event_end_time IS NULL) "
+            "OR (event_start_time IS NOT NULL "
+            "AND event_end_time IS NOT NULL "
+            "AND event_start_time < event_end_time)",
+            name="check_booking_event_time_range"
         ),
     )
 
@@ -545,13 +567,26 @@ class Availability(db.Model):
     )
 
     available_date = db.Column(db.Date, nullable=False)
+
+    # Each availability record represents a specific time slot.
+    start_time = db.Column(db.Time, nullable=False)
+    end_time = db.Column(db.Time, nullable=False)
+
     status = db.Column(db.String(20), nullable=False)
 
     __table_args__ = (
+        # Multiple slots per date are allowed.
+        # Exact duplicate slots are prohibited.
         UniqueConstraint(
             "caterer_id",
             "available_date",
-            name="unique_caterer_availability_date"
+            "start_time",
+            "end_time",
+            name="unique_caterer_availability_slot"
+        ),
+        CheckConstraint(
+            "start_time < end_time",
+            name="check_availability_time_range"
         ),
         CheckConstraint(
             "status IN ('available', 'unavailable', 'booked')",
@@ -638,6 +673,7 @@ class Review(db.Model):
 
     rating = db.Column(db.Integer, nullable=False)
     comment = db.Column(db.Text)
+
     created_at = db.Column(
         db.DateTime,
         nullable=False,
@@ -684,7 +720,13 @@ class Notification(db.Model):
 
     message = db.Column(db.Text, nullable=False)
     notification_type = db.Column(db.String(50), nullable=False)
-    is_read = db.Column(db.Boolean, nullable=False, default=False)
+
+    is_read = db.Column(
+        db.Boolean,
+        nullable=False,
+        default=False
+    )
+
     created_at = db.Column(
         db.DateTime,
         nullable=False,

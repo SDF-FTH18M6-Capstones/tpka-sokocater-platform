@@ -1,5 +1,6 @@
-import unittest
 
+import unittest
+from datetime import timedelta
 from decimal import Decimal
 
 from flask_jwt_extended import create_access_token
@@ -478,6 +479,42 @@ class TestMenuRoutes(unittest.TestCase):
         )
 
         self.assertEqual(response.status_code, 400)
+
+    # ==================================================
+    # INVALID JWT TESTS
+    # ==================================================
+
+    def test_invalid_token_is_rejected(self):
+
+        response = self.client.post(
+            "/api/menus",
+            json=self.valid_menu_data(),
+            headers={
+                "Authorization": "Bearer invalid.jwt.token"
+            }
+        )
+
+        self.assertEqual(response.status_code, 422)
+
+    def test_expired_token_is_rejected(self):
+
+        expired_token = create_access_token(
+            identity=str(self.caterer_user.id),
+            additional_claims={
+                "role": "caterer"
+            },
+            expires_delta=timedelta(seconds=-1)
+        )
+
+        response = self.client.post(
+            "/api/menus",
+            json=self.valid_menu_data(),
+            headers={
+                "Authorization": f"Bearer {expired_token}"
+            }
+        )
+
+        self.assertEqual(response.status_code, 401)
 
     # ==================================================
     # DELETE MENU ROUTE

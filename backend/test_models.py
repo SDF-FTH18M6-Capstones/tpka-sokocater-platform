@@ -1,7 +1,7 @@
 
 import unittest
 
-from datetime import date
+from datetime import date, time
 from decimal import Decimal
 
 from sqlalchemy import event, inspect
@@ -294,10 +294,12 @@ class TestSokoCaterModels(unittest.TestCase):
 
         db.session.add(booking_item)
 
-        # Create availability.
+        # Create availability time slot.
         availability = Availability(
             caterer_id=caterer.id,
             available_date=date(2027, 5, 20),
+            start_time=time(9, 0),
+            end_time=time(12, 0),
             status="available"
         )
 
@@ -802,6 +804,8 @@ class TestSokoCaterModels(unittest.TestCase):
         availability = Availability(
             caterer_id=caterer.id,
             available_date=date(2027, 5, 20),
+            start_time=time(9, 0),
+            end_time=time(12, 0),
             status="invalid"
         )
 
@@ -813,22 +817,61 @@ class TestSokoCaterModels(unittest.TestCase):
         db.session.rollback()
 
     # --------------------------------------------------
-    # TEST 19: CATERER CANNOT HAVE DUPLICATE AVAILABILITY DATE
+    # TEST 19: MULTIPLE SLOTS ARE ALLOWED ON SAME DATE
     # --------------------------------------------------
 
-    def test_unique_caterer_availability_date(self):
+    def test_multiple_availability_slots_allowed_on_same_date(self):
 
         user, caterer = self.create_sample_caterer()
 
         first = Availability(
             caterer_id=caterer.id,
             available_date=date(2027, 5, 20),
+            start_time=time(9, 0),
+            end_time=time(12, 0),
             status="available"
         )
 
         second = Availability(
             caterer_id=caterer.id,
             available_date=date(2027, 5, 20),
+            start_time=time(14, 0),
+            end_time=time(17, 0),
+            status="available"
+        )
+
+        db.session.add_all([first, second])
+        db.session.commit()
+
+        self.assertEqual(
+            Availability.query.filter_by(
+                caterer_id=caterer.id,
+                available_date=date(2027, 5, 20)
+            ).count(),
+            2
+        )
+
+    # --------------------------------------------------
+    # TEST 20: EXACT DUPLICATE AVAILABILITY SLOT IS REJECTED
+    # --------------------------------------------------
+
+    def test_duplicate_availability_slot_rejected(self):
+
+        user, caterer = self.create_sample_caterer()
+
+        first = Availability(
+            caterer_id=caterer.id,
+            available_date=date(2027, 5, 20),
+            start_time=time(9, 0),
+            end_time=time(12, 0),
+            status="available"
+        )
+
+        second = Availability(
+            caterer_id=caterer.id,
+            available_date=date(2027, 5, 20),
+            start_time=time(9, 0),
+            end_time=time(12, 0),
             status="unavailable"
         )
 
@@ -843,7 +886,75 @@ class TestSokoCaterModels(unittest.TestCase):
         db.session.rollback()
 
     # --------------------------------------------------
-    # TEST 20: PAYMENT AMOUNT CANNOT BE NEGATIVE
+    # TEST 21: INVALID AVAILABILITY TIME RANGE IS REJECTED
+    # --------------------------------------------------
+
+    def test_invalid_availability_time_range_rejected(self):
+
+        user, caterer = self.create_sample_caterer()
+
+        availability = Availability(
+            caterer_id=caterer.id,
+            available_date=date(2027, 5, 20),
+            start_time=time(17, 0),
+            end_time=time(9, 0),
+            status="available"
+        )
+
+        db.session.add(availability)
+
+        with self.assertRaises(IntegrityError):
+            db.session.commit()
+
+        db.session.rollback()
+
+    # --------------------------------------------------
+    # TEST 22: BOOKING TIMES MUST BE BOTH NULL OR VALID
+    # --------------------------------------------------
+
+    def test_booking_time_range_constraint(self):
+
+        user, caterer = self.create_sample_caterer()
+        customer = self.create_sample_customer()
+
+        booking = Booking(
+            customer_id=customer.id,
+            caterer_id=caterer.id,
+            event_date=date(2027, 6, 10),
+            event_start_time=time(17, 0),
+            event_end_time=time(9, 0),
+            event_type="Birthday",
+            event_location="Nairobi",
+            guest_count=20,
+            estimated_total=Decimal("20000.00"),
+            status="pending"
+        )
+
+        db.session.add(booking)
+
+        with self.assertRaises(IntegrityError):
+            db.session.commit()
+
+        db.session.rollback()
+
+    # --------------------------------------------------
+    # TEST 23: LEGACY BOOKINGS CAN HAVE NULL EVENT TIMES
+    # --------------------------------------------------
+
+    def test_legacy_booking_can_have_null_event_times(self):
+
+        user, caterer = self.create_sample_caterer()
+        customer = self.create_sample_customer()
+
+        booking = self.create_sample_booking(customer, caterer)
+
+        db.session.commit()
+
+        self.assertIsNone(booking.event_start_time)
+        self.assertIsNone(booking.event_end_time)
+
+    # --------------------------------------------------
+    # TEST 24: PAYMENT AMOUNT CANNOT BE NEGATIVE
     # --------------------------------------------------
 
     def test_negative_payment_amount_rejected(self):
@@ -868,7 +979,7 @@ class TestSokoCaterModels(unittest.TestCase):
         db.session.rollback()
 
     # --------------------------------------------------
-    # TEST 21: REVIEW RATING MUST BE BETWEEN 1 AND 5
+    # TEST 25: REVIEW RATING MUST BE BETWEEN 1 AND 5
     # --------------------------------------------------
 
     def test_invalid_review_rating_rejected(self):
@@ -894,7 +1005,7 @@ class TestSokoCaterModels(unittest.TestCase):
         db.session.rollback()
 
     # --------------------------------------------------
-    # TEST 22: REVIEW BOOKING ID MUST BE UNIQUE
+    # TEST 26: REVIEW BOOKING ID MUST BE UNIQUE
     # --------------------------------------------------
 
     def test_one_review_per_booking(self):

@@ -1,14 +1,11 @@
 from flask import Blueprint, jsonify, request
-from flask_jwt_extended import (
-    jwt_required,
-    get_jwt_identity,
-    get_jwt
-)
+from flask_jwt_extended import jwt_required
 from sqlalchemy.exc import IntegrityError
 from marshmallow import ValidationError
 
 from extensions import db
 from models import Menu, Caterer
+from auth_utils import get_authenticated_user
 from schemas.menu_schema import MenuSchema
 
 
@@ -25,18 +22,13 @@ menus_schema = MenuSchema(many=True)
 def get_current_caterer():
     """Get the caterer profile belonging to the logged-in user."""
 
-    claims = get_jwt()
+    user = get_authenticated_user()
 
-    if claims.get("role") != "caterer":
-        return None
-
-    try:
-        user_id = int(get_jwt_identity())
-    except (TypeError, ValueError):
+    if user is None or user.role != "caterer":
         return None
 
     return Caterer.query.filter_by(
-        user_id=user_id
+        user_id=user.id
     ).first()
 
 
