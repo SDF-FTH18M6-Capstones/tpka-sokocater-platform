@@ -1,7 +1,7 @@
-
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 
 import Navbar from "./components/Navbar";
+import ProtectedRoute from "./components/ProtectedRoute";
 
 import Home from "./pages/customer/Home";
 import CatererListing from "./pages/customer/CatererListing";
@@ -20,21 +20,21 @@ function App() {
   return (
     <BrowserRouter>
       <Navbar />
-
       <Routes>
-        {/* Customer pages */}
-        <Route path="/" element={<Home />} />
-        <Route path="/caterers" element={<CatererListing />} />
-        <Route path="/caterer/:id" element={<CatererDetail />} />
-        <Route path="/booking" element={<BookingForm />} />
-
-        {/* Authentication pages */}
+        {/* Public - anyone can see */}
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
 
-        {/* Caterer pages */}
-        <Route path="/caterer/dashboard" element={<Dashboard />} />
-        <Route path="/caterer/profile" element={<CatererForm />} />
+        {/* Protected - must login first */}
+        <Route path="/" element={<ProtectedRoute><Home /></ProtectedRoute>} />
+        <Route path="/caterers" element={<ProtectedRoute><CatererListing /></ProtectedRoute>} />
+        <Route path="/caterer/:id" element={<ProtectedRoute><CatererDetail /></ProtectedRoute>} />
+        <Route path="/booking" element={<ProtectedRoute><BookingForm /></ProtectedRoute>} />
+        <Route path="/caterer/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+        <Route path="/caterer/profile" element={<ProtectedRoute><CatererForm /></ProtectedRoute>} />
+
+        {/* Wrong URL -> go to login */}
+        <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     </BrowserRouter>
   );

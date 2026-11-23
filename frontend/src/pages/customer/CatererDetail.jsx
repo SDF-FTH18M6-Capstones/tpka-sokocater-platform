@@ -1,7 +1,19 @@
+import { useNavigate } from "react-router-dom";
+
 function CatererDetail() {
+  const navigate = useNavigate();
+
+  const caterer = {
+    id: 1,
+    name: "Elegant Events Catering",
+    location: "Nairobi, Kenya",
+    phone: "0700 000 000",
+    email: "info@example.com",
+  };
+
   return (
     <div className="page-container">
-      <h1>Elegant Events Catering</h1>
+      <h1>{caterer.name}</h1>
       <p>Professional catering services for weddings, parties and corporate events.</p>
 
       <section>
@@ -16,7 +28,13 @@ function CatererDetail() {
         <p>Dessert Package - KSh 500 per person</p>
       </section>
 
-      <button>Book This Caterer</button>
+      <button
+        type="button"
+        onClick={() => navigate("/booking", { state: { caterer } })}
+        style={{ cursor: "pointer" }}
+      >
+        Book This Caterer
+      </button>
 
       <section>
         <h2>Customer Reviews</h2>
@@ -26,9 +44,9 @@ function CatererDetail() {
 
       <section>
         <h2>Contact Information</h2>
-        <p>Location: Nairobi, Kenya</p>
-        <p>Phone: 0700 000 000</p>
-        <p>Email: info@example.com</p>
+        <p>Location: {caterer.location}</p>
+        <p>Phone: {caterer.phone}</p>
+        <p>Email: {caterer.email}</p>
       </section>
     </div>
   );

@@ -1,4 +1,3 @@
-
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import create_access_token
 from marshmallow import ValidationError
@@ -16,22 +15,42 @@ register_schema = RegisterSchema()
 login_schema = LoginSchema()
 
 
+def _flat_error(err_messages):
+    """Convert Marshmallow validation errors into readable text."""
+    parts = []
+
+    for field, messages in err_messages.items():
+        if isinstance(messages, list):
+            parts.append(
+                f"{field}: {', '.join(str(message) for message in messages)}"
+            )
+        else:
+            parts.append(f"{field}: {messages}")
+
+    return " | ".join(parts) if parts else "Validation failed"
+
+
 # ============================================================
 # REGISTER
 # ============================================================
 
 @auth_bp.route("/api/auth/register", methods=["POST"])
 def register():
+
     data = request.get_json(silent=True)
 
-    # Check whether the request contains a valid JSON object.
     if not isinstance(data, dict):
         return jsonify({
             "error": "Invalid JSON body"
         }), 400
 
+    # Support both full_name and name from frontend requests.
+    data = data.copy()
+
+    if "full_name" not in data and "name" in data:
+        data["full_name"] = data["name"]
+
     try:
-        # Validate and normalize registration data.
         validated_data = register_schema.load(data)
 
         email = validated_data["email"]
@@ -58,12 +77,20 @@ def register():
             role=validated_data["role"]
         )
 
-        # Save the user.
         db.session.add(user)
         db.session.commit()
 
+        # Generate JWT access token.
+        access_token = create_access_token(
+            identity=str(user.id),
+            additional_claims={
+                "role": user.role
+            }
+        )
+
         return jsonify({
             "message": "User registered successfully",
+            "access_token": access_token,
             "user": {
                 "id": user.id,
                 "full_name": user.full_name,
@@ -77,7 +104,7 @@ def register():
         db.session.rollback()
 
         return jsonify({
-            "error": error.messages
+            "error": _flat_error(error.messages)
         }), 400
 
     except IntegrityError:
@@ -94,25 +121,24 @@ def register():
 
 @auth_bp.route("/api/auth/login", methods=["POST"])
 def login():
+
     data = request.get_json(silent=True)
 
-    # Check whether the request contains a valid JSON object.
     if not isinstance(data, dict):
         return jsonify({
             "error": "Invalid JSON body"
         }), 400
 
     try:
-        # Validate and normalize login data.
         validated_data = login_schema.load(data)
 
         email = validated_data["email"]
         password = validated_data["password"]
 
-        # Find the user using the normalized email.
+        # Find user using normalized email.
         user = User.query.filter_by(email=email).first()
 
-        # Verify the user and password.
+        # Verify user and password.
         if not user or not check_password_hash(
             user.password_hash,
             password
@@ -121,7 +147,7 @@ def login():
                 "error": "Invalid email or password"
             }), 401
 
-        # Generate a JWT access token.
+        # Generate JWT access token.
         access_token = create_access_token(
             identity=str(user.id),
             additional_claims={
@@ -143,5 +169,5 @@ def login():
 
     except ValidationError as error:
         return jsonify({
-            "error": error.messages
+            "error": _flat_error(error.messages)
         }), 400

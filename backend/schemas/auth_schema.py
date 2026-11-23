@@ -1,12 +1,17 @@
+from marshmallow import Schema, fields, validate, pre_load, EXCLUDE
 
-from marshmallow import Schema, fields, validate, pre_load
 
+class BaseAuthSchema(Schema):
 
-class RegisterSchema(Schema):
+    class Meta:
+        unknown = EXCLUDE
 
     @pre_load
     def normalize_email(self, data, **kwargs):
-        """Remove surrounding spaces and lowercase the email before validation."""
+        """
+        Remove surrounding spaces and lowercase email
+        before validation.
+        """
         if isinstance(data, dict):
             data = data.copy()
 
@@ -14,6 +19,13 @@ class RegisterSchema(Schema):
                 data["email"] = data["email"].strip().lower()
 
         return data
+
+
+# ============================================================
+# REGISTER SCHEMA
+# ============================================================
+
+class RegisterSchema(BaseAuthSchema):
 
     full_name = fields.String(
         required=True,
@@ -39,18 +51,11 @@ class RegisterSchema(Schema):
     )
 
 
-class LoginSchema(Schema):
+# ============================================================
+# LOGIN SCHEMA
+# ============================================================
 
-    @pre_load
-    def normalize_email(self, data, **kwargs):
-        """Normalize the email before Marshmallow validates it."""
-        if isinstance(data, dict):
-            data = data.copy()
-
-            if isinstance(data.get("email"), str):
-                data["email"] = data["email"].strip().lower()
-
-        return data
+class LoginSchema(BaseAuthSchema):
 
     email = fields.Email(required=True)
 

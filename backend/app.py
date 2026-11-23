@@ -1,5 +1,6 @@
 import os
 from flask import Flask, jsonify
+from flask_cors import CORS
 from extensions import db, jwt
 import models
 from routes.auth_routes import auth_bp
@@ -10,6 +11,7 @@ from routes.booking_routes import booking_bp
 
 def create_app(test_config=None):
     app = Flask(__name__)
+    CORS(app, resources={r"/api/*": {"origins": ["http://localhost:5173", "http://127.0.0.1:5173"]}}, supports_credentials=True)
     os.makedirs(app.instance_path, exist_ok=True)
     app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///sokocater.db"
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False

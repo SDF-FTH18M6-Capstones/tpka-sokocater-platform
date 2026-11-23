@@ -1,4 +1,3 @@
-
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import (
     jwt_required,
@@ -12,12 +11,10 @@ from extensions import db
 from models import Package, Caterer
 from schemas.package_schema import PackageSchema
 
-
 package_bp = Blueprint("packages", __name__)
 
 package_schema = PackageSchema()
 packages_schema = PackageSchema(many=True)
-
 
 # ==================================================
 # HELPER FUNCTION
@@ -43,7 +40,6 @@ def get_current_caterer():
         user_id=user_id
     ).first()
 
-
 # ==================================================
 # GET ALL PACKAGES - PUBLIC
 # ==================================================
@@ -57,7 +53,6 @@ def get_packages():
         "message": "Packages retrieved successfully",
         "data": packages_schema.dump(packages)
     }), 200
-
 
 # ==================================================
 # GET SINGLE PACKAGE - PUBLIC
@@ -76,7 +71,6 @@ def get_package(package_id):
     return jsonify({
         "data": package_schema.dump(package)
     }), 200
-
 
 # ==================================================
 # CREATE PACKAGE - CATERER ONLY
@@ -100,16 +94,23 @@ def create_package():
             "error": "Invalid JSON body"
         }), 400
 
+        # FIX: If client sends another caterer's id, reject it
+    if "caterer_id" in data and data["caterer_id"] != current_caterer.id:
+        return jsonify({
+            "error": "You can only create packages for your own profile"
+        }), 403
+
     try:
+        # Inject caterer_id from JWT BEFORE validation
+        data = dict(data)
+        data["caterer_id"] = current_caterer.id
         validated_data = package_schema.load(data)
+        validated_data.pop("caterer_id", None)
 
-        # Caterers can only create packages for their own profiles.
-        if validated_data["caterer_id"] != current_caterer.id:
-            return jsonify({
-                "error": "You can only create packages for your own profile"
-            }), 403
-
-        package = Package(**validated_data)
+        package = Package(
+            **validated_data,
+            caterer_id=current_caterer.id
+        )
 
         db.session.add(package)
         db.session.commit()
@@ -132,7 +133,6 @@ def create_package():
         return jsonify({
             "error": "Unable to create package"
         }), 409
-
 
 # ==================================================
 # UPDATE PACKAGE - OWNER ONLY
@@ -176,19 +176,18 @@ def update_package(package_id):
         }), 400
 
     try:
+        # FIX: Block ownership transfer up front
+        if "caterer_id" in data:
+            return jsonify({
+                "error": "You cannot transfer a package to another caterer"
+            }), 403
+
         validated_data = package_schema.load(
             data,
             partial=True
         )
 
-        # Prevent transferring a package to another caterer.
-        if (
-            "caterer_id" in validated_data
-            and validated_data["caterer_id"] != current_caterer.id
-        ):
-            return jsonify({
-                "error": "You cannot transfer a package to another caterer"
-            }), 403
+        validated_data.pop("caterer_id", None)
 
         # Validate the combined guest range.
         # Use submitted values when provided and existing values otherwise.
@@ -238,7 +237,6 @@ def update_package(package_id):
         return jsonify({
             "error": "Unable to update package"
         }), 409
-
 
 # ==================================================
 # DELETE PACKAGE - OWNER ONLY

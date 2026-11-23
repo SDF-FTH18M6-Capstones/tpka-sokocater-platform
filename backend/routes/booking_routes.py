@@ -1,4 +1,3 @@
-
 from decimal import Decimal
 
 from flask import Blueprint, jsonify, request
@@ -47,7 +46,7 @@ def get_current_user():
 
 
 def get_booking_total(booking_id):
-    """Calculate the total from all booking items."""
+    """Calculate the total from all booking items, including add-ons."""
 
     items = BookingItem.query.filter_by(
         booking_id=booking_id
@@ -211,6 +210,7 @@ def get_booking(booking_id):
 
 # --------------------------------------------------
 # CREATE BOOKING
+# CUSTOMER ONLY
 # --------------------------------------------------
 
 @booking_bp.route("/api/bookings", methods=["POST"])
@@ -285,6 +285,7 @@ def create_booking():
         package_item = BookingItem(
             booking_id=booking.id,
             package_id=package.id,
+            addon_id=None,
             quantity=booking.guest_count,
             unit_price=package.price_per_guest
         )
@@ -323,6 +324,8 @@ def create_booking():
 
 # --------------------------------------------------
 # UPDATE BOOKING
+# CATERER: UPDATE STATUS
+# CUSTOMER: UPDATE OWN PENDING BOOKING DETAILS
 # --------------------------------------------------
 
 @booking_bp.route("/api/bookings/<int:booking_id>", methods=["PUT"])
@@ -372,7 +375,6 @@ def update_booking(booking_id):
                 "error": "You are not authorized to update this booking."
             }), 403
 
-        # Caterers can only update the status.
         if set(data.keys()) != {"status"}:
             return jsonify({
                 "error": "Caterers can only update booking status."
@@ -402,10 +404,9 @@ def update_booking(booking_id):
                 )
             }), 400
 
-        booking.status = new_status
-
         try:
 
+            booking.status = new_status
             db.session.commit()
 
             return jsonify({
@@ -420,6 +421,11 @@ def update_booking(booking_id):
             return jsonify({
                 "error": "Unable to update booking status."
             }), 409
+
+        except Exception:
+
+            db.session.rollback()
+            raise
 
     # ----------------------------------------------
     # CUSTOMER: UPDATE BOOKING DETAILS
@@ -437,7 +443,6 @@ def update_booking(booking_id):
                 "error": "Only pending bookings can be edited."
             }), 400
 
-        # Customers cannot modify server-controlled fields.
         forbidden_fields = {
             "status",
             "customer_id",
@@ -488,15 +493,15 @@ def update_booking(booking_id):
                 booking.id
             )
 
-            if not package_item:
+            new_package_id = booking_data.get(
+                "package_id",
+                package_item.package_id if package_item else None
+            )
+
+            if new_package_id is None:
                 return jsonify({
                     "error": "Booking package information is missing."
                 }), 400
-
-            new_package_id = booking_data.get(
-                "package_id",
-                package_item.package_id
-            )
 
             caterer = db.session.get(
                 Caterer,
@@ -532,10 +537,26 @@ def update_booking(booking_id):
 
             booking.guest_count = new_guest_count
 
-            package_item.package_id = package.id
-            package_item.quantity = new_guest_count
-            package_item.unit_price = package.price_per_guest
+            # Update the existing package item or create one if missing.
+            if package_item:
 
+                package_item.package_id = package.id
+                package_item.quantity = new_guest_count
+                package_item.unit_price = package.price_per_guest
+
+            else:
+
+                package_item = BookingItem(
+                    booking_id=booking.id,
+                    package_id=package.id,
+                    addon_id=None,
+                    quantity=new_guest_count,
+                    unit_price=package.price_per_guest
+                )
+
+                db.session.add(package_item)
+
+            # Include all booking items when calculating the new total.
             db.session.flush()
 
             booking.estimated_total = get_booking_total(
@@ -579,6 +600,7 @@ def update_booking(booking_id):
 
 # --------------------------------------------------
 # DELETE BOOKING
+# CUSTOMER ONLY - OWN PENDING BOOKING
 # --------------------------------------------------
 
 @booking_bp.route("/api/bookings/<int:booking_id>", methods=["DELETE"])
