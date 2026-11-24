@@ -10,9 +10,9 @@ const stats = [
 
 const menuItems = [
   "Overview",
-  "Bookings",
-  "My Services",
-  "Enquiries",
+  "My Menus",
+  "My Packages",
+  "My Bookings",
   "Business Profile",
 ];
 
@@ -69,30 +69,36 @@ function Dashboard() {
           </>
         );
 
-      case "Bookings":
+            case "My Menus":
+        return (
+          <section className="dashboard-panel">
+            <h2>My Menus</h2>
+            <p>Your menu items - Pilau, Chapati, Nyama Choma, etc.</p>
+            <span className="empty-state">No menus added yet. Add them in Create Package.</span>
+          </section>
+        );
+
+      case "My Packages":
+        return (
+          <section className="dashboard-panel">
+            <h2>My Packages</h2>
+            <p>All your packages with price per guest.</p>
+            <a href="/caterer/create-package"><button type="button" className="save-profile-button">+ Create New Package</button></a>
+            <br /><br />
+            <span className="empty-state">No packages yet.</span>
+          </section>
+        );
+
+      case "My Bookings":
         return (
           <section className="dashboard-panel">
             <h2>My Bookings</h2>
             <p>Manage and track your customer booking requests.</p>
-            <span className="empty-state">
-              No bookings available yet.
-            </span>
+            <span className="empty-state">No bookings available yet.</span>
           </section>
         );
 
-      case "My Services":
-        return (
-          <section className="dashboard-panel">
-            <h2>My Catering Services</h2>
-            <p>
-              Manage the catering services and packages you offer
-              to customers.
-            </p>
-            <span className="empty-state">
-              No services have been added yet.
-            </span>
-          </section>
-        );
+      
 
       case "Enquiries":
         return (

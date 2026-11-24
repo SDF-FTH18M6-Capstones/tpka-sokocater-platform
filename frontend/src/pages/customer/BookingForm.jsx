@@ -93,7 +93,8 @@ function BookingForm() {
 
       setTimeout(() => navigate("/"), 2000);
     } catch (err) {
-      setError(err.message || "Unable to create booking.");
+      const msg = err?.message || err?.error || err;
+      setError(typeof msg === 'string' ? msg : JSON.stringify(msg));
     } finally {
       setLoading(false);
     }
@@ -108,6 +109,9 @@ function BookingForm() {
       </main>
     );
   }
+
+  const liveGuestCount = Number(formData.guests) || 0;
+  const liveTotal = liveGuestCount * Number(selectedPackage.price_per_guest || 0);
 
   return (
     <main className="page-container">
@@ -128,6 +132,9 @@ function BookingForm() {
         <p>
           <strong>Price per guest:</strong> KSh{" "}
           {Number(selectedPackage.price_per_guest).toLocaleString()}
+        </p>
+        <p style={{ fontSize: '18px', fontWeight: 'bold', color: '#0a7a42' }}>
+          <strong>Estimated Total:</strong> KSh {liveTotal.toLocaleString()} ({liveGuestCount} guests x KSh {Number(selectedPackage.price_per_guest).toLocaleString()})
         </p>
         <p>
           <strong>Guest range:</strong>{" "}

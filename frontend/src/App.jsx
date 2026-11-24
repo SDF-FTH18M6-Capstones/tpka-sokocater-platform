@@ -10,6 +10,8 @@ import BookingForm from "./pages/customer/BookingForm";
 
 import Dashboard from "./pages/caterer/Dashboard";
 import CatererForm from "./pages/caterer/CatererForm";
+import CreatePackage from "./pages/caterer/CreatePackage";
+import CatererProfile from "./pages/caterer/CatererProfile";
 
 import Login from "./pages/auth/Login";
 import Signup from "./pages/auth/Signup";
@@ -27,14 +29,7 @@ function App() {
         <Route path="/signup" element={<Signup />} />
 
         {/* Customer routes */}
-        <Route
-          path="/"
-          element={
-            <ProtectedRoute>
-              <Home />
-            </ProtectedRoute>
-          }
-        />
+        <Route path="/" element={<Home />} />
 
         <Route
           path="/caterers"
@@ -63,11 +58,11 @@ function App() {
           }
         />
 
-        {/* Caterer routes */}
+        {/* Caterer routes - CATERER ONLY */}
         <Route
           path="/caterer/dashboard"
           element={
-            <ProtectedRoute>
+            <ProtectedRoute allowedRoles={["caterer", "admin"]}>
               <Dashboard />
             </ProtectedRoute>
           }
@@ -76,14 +71,32 @@ function App() {
         <Route
           path="/caterer/profile"
           element={
-            <ProtectedRoute>
+            <ProtectedRoute allowedRoles={["caterer", "admin"]}>
               <CatererForm />
             </ProtectedRoute>
           }
         />
 
+        <Route
+          path="/caterer/create-package"
+          element={
+            <ProtectedRoute allowedRoles={["caterer", "admin"]}>
+              <CreatePackage />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/caterer/view-profile"
+          element={
+            <ProtectedRoute allowedRoles={["caterer", "admin"]}>
+              <CatererProfile />
+            </ProtectedRoute>
+          }
+        />
+
         {/* Unknown routes */}
-        <Route path="*" element={<Navigate to="/login" replace />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
   );
