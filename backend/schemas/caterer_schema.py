@@ -1,5 +1,18 @@
 
-from marshmallow import Schema, fields, validate, validates, ValidationError
+from marshmallow import (
+    Schema,
+    fields,
+    validate,
+    validates,
+    ValidationError
+)
+
+
+ALLOWED_CATEGORIES = [
+    "Food",
+    "Wedding",
+    "Corporate"
+]
 
 
 class CatererSchema(Schema):
@@ -14,6 +27,14 @@ class CatererSchema(Schema):
     business_name = fields.String(
         required=True,
         validate=validate.Length(min=2, max=150)
+    )
+
+    category = fields.String(
+        required=True,
+        validate=validate.OneOf(
+            ALLOWED_CATEGORIES,
+            error="Category must be Food, Wedding, or Corporate."
+        )
     )
 
     description = fields.String(allow_none=True)

@@ -101,6 +101,7 @@ class TestCatererRoutes(unittest.TestCase):
         data = {
             "user_id": user.id,
             "business_name": "Fresh Foods Catering",
+            "category": "Food",
             "description": "Professional catering services",
             "location": "Nairobi",
             "contact_number": "0712345678",
@@ -126,6 +127,7 @@ class TestCatererRoutes(unittest.TestCase):
         return {
             "user_id": user.id,
             "business_name": "Fresh Foods Catering",
+            "category": "Food",
             "description": "Professional catering services",
             "location": "Nairobi",
             "contact_number": "0712345678",
@@ -246,10 +248,73 @@ class TestCatererRoutes(unittest.TestCase):
             "Fresh Foods Catering"
         )
 
+        self.assertEqual(
+            data["data"]["category"],
+            "Food"
+        )
+
     def test_get_single_caterer_not_found(self):
         response = self.client.get("/api/caterers/999")
 
         self.assertEqual(response.status_code, 404)
+
+    # ==================================================
+    # CATEGORY FILTERING TESTS
+    # ==================================================
+
+    def test_filter_caterers_by_food_category(self):
+        self.create_caterer_profile(category="Food")
+
+        response = self.client.get(
+            "/api/caterers?category=Food"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.get_json()["data"]), 1)
+
+    def test_filter_caterers_by_wedding_category(self):
+        self.create_caterer_profile(category="Wedding")
+
+        response = self.client.get(
+            "/api/caterers?category=Wedding"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.get_json()["data"]), 1)
+
+    def test_filter_caterers_by_corporate_category(self):
+        self.create_caterer_profile(category="Corporate")
+
+        response = self.client.get(
+            "/api/caterers?category=Corporate"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.get_json()["data"]), 1)
+
+    def test_category_filter_is_case_insensitive(self):
+        self.create_caterer_profile(category="Wedding")
+
+        response = self.client.get(
+            "/api/caterers?category=wedding"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.get_json()["data"]), 1)
+
+    def test_invalid_category_filter_is_rejected(self):
+        response = self.client.get(
+            "/api/caterers?category=Private%20Event"
+        )
+
+        self.assertEqual(response.status_code, 400)
+
+    def test_empty_category_filter_is_rejected(self):
+        response = self.client.get(
+            "/api/caterers?category="
+        )
+
+        self.assertEqual(response.status_code, 400)
 
     # ==================================================
     # CREATE CATERER ROUTE
@@ -277,9 +342,70 @@ class TestCatererRoutes(unittest.TestCase):
         )
 
         self.assertEqual(
+            data["data"]["category"],
+            "Food"
+        )
+
+        self.assertEqual(
             data["data"]["verification_status"],
             "pending"
         )
+
+    def test_create_caterer_with_wedding_category(self):
+        data = self.valid_profile_data()
+        data["category"] = "Wedding"
+
+        response = self.client.post(
+            "/api/caterers",
+            json=data,
+            headers=self.create_token(self.caterer_user)
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(
+            response.get_json()["data"]["category"],
+            "Wedding"
+        )
+
+    def test_create_caterer_with_corporate_category(self):
+        data = self.valid_profile_data()
+        data["category"] = "Corporate"
+
+        response = self.client.post(
+            "/api/caterers",
+            json=data,
+            headers=self.create_token(self.caterer_user)
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(
+            response.get_json()["data"]["category"],
+            "Corporate"
+        )
+
+    def test_create_caterer_with_invalid_category(self):
+        data = self.valid_profile_data()
+        data["category"] = "Private Event"
+
+        response = self.client.post(
+            "/api/caterers",
+            json=data,
+            headers=self.create_token(self.caterer_user)
+        )
+
+        self.assertEqual(response.status_code, 400)
+
+    def test_create_caterer_without_category(self):
+        data = self.valid_profile_data()
+        data.pop("category")
+
+        response = self.client.post(
+            "/api/caterers",
+            json=data,
+            headers=self.create_token(self.caterer_user)
+        )
+
+        self.assertEqual(response.status_code, 400)
 
     def test_create_caterer_without_token(self):
         response = self.client.post(
@@ -393,7 +519,7 @@ class TestCatererRoutes(unittest.TestCase):
         self.assertIsNone(caterer)
 
     # ==================================================
-    # UPDATE CATERER ROUTE
+    # UPDATE CATERER PROFILE
     # ==================================================
 
     def test_update_own_caterer_profile_successful(self):
@@ -413,6 +539,41 @@ class TestCatererRoutes(unittest.TestCase):
             response.get_json()["data"]["business_name"],
             "Updated Catering Business"
         )
+
+    def test_update_own_caterer_category_successful(self):
+        caterer = self.create_caterer_profile()
+
+        response = self.client.put(
+            f"/api/caterers/{caterer.id}",
+            json={
+                "category": "Wedding"
+            },
+            headers=self.create_token(self.caterer_user)
+        )
+
+        self.assertEqual(response.status_code, 200)
+
+        self.assertEqual(
+            response.get_json()["data"]["category"],
+            "Wedding"
+        )
+
+    def test_update_caterer_with_invalid_category(self):
+        caterer = self.create_caterer_profile()
+
+        response = self.client.put(
+            f"/api/caterers/{caterer.id}",
+            json={
+                "category": "Private Event"
+            },
+            headers=self.create_token(self.caterer_user)
+        )
+
+        self.assertEqual(response.status_code, 400)
+
+        db.session.refresh(caterer)
+
+        self.assertEqual(caterer.category, "Food")
 
     def test_update_caterer_without_token(self):
         caterer = self.create_caterer_profile()

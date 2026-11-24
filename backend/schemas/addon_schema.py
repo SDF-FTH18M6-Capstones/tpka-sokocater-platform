@@ -2,9 +2,17 @@ from marshmallow import (
     Schema,
     fields,
     validate,
-    validates
+    validates,
+    ValidationError
 )
-from marshmallow import ValidationError
+
+
+ALLOWED_ADDON_TYPES = [
+    "venue",
+    "chairs",
+    "tables",
+    "materials"
+]
 
 
 class AddOnSchema(Schema):
@@ -29,6 +37,15 @@ class AddOnSchema(Schema):
         required=True,
         as_string=True,
         validate=validate.Range(min=0)
+    )
+
+    addon_type = fields.String(
+        required=False,
+        allow_none=True,
+        validate=validate.OneOf(
+            ALLOWED_ADDON_TYPES,
+            error="Add-on type must be venue, chairs, tables, or materials."
+        )
     )
 
     @validates("addon_name")

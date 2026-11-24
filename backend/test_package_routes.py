@@ -11,7 +11,9 @@ from models import (
     Package,
     Menu,
     MenuItem,
-    PackageItem
+    PackageItem,
+    AddOn,
+    PackageAddOn
 )
 from flask_jwt_extended import create_access_token
 
@@ -58,10 +60,18 @@ class TestPackageRoutes(unittest.TestCase):
             role="caterer"
         )
 
+        self.food_caterer_user = User(
+            full_name="Food Caterer",
+            email="food@test.com",
+            password_hash="hashedpassword",
+            role="caterer"
+        )
+
         db.session.add_all([
             self.customer,
             self.caterer_user,
-            self.other_caterer_user
+            self.other_caterer_user,
+            self.food_caterer_user
         ])
 
         db.session.commit()
@@ -74,6 +84,7 @@ class TestPackageRoutes(unittest.TestCase):
             user_id=self.caterer_user.id,
             business_name="Test Catering",
             location="Nairobi",
+            category="Wedding",
             verification_status="pending"
         )
 
@@ -81,12 +92,22 @@ class TestPackageRoutes(unittest.TestCase):
             user_id=self.other_caterer_user.id,
             business_name="Other Catering",
             location="Nairobi",
+            category="Corporate",
+            verification_status="pending"
+        )
+
+        self.food_caterer = Caterer(
+            user_id=self.food_caterer_user.id,
+            business_name="Food Only Catering",
+            location="Nairobi",
+            category="Food",
             verification_status="pending"
         )
 
         db.session.add_all([
             self.caterer,
-            self.other_caterer
+            self.other_caterer,
+            self.food_caterer
         ])
 
         db.session.commit()
@@ -121,6 +142,11 @@ class TestPackageRoutes(unittest.TestCase):
             additional_claims={"role": "caterer"}
         )
 
+        self.food_caterer_token = create_access_token(
+            identity=str(self.food_caterer_user.id),
+            additional_claims={"role": "caterer"}
+        )
+
         self.customer_token = create_access_token(
             identity=str(self.customer.id),
             additional_claims={"role": "customer"}
@@ -132,6 +158,10 @@ class TestPackageRoutes(unittest.TestCase):
 
         self.other_caterer_headers = {
             "Authorization": f"Bearer {self.other_caterer_token}"
+        }
+
+        self.food_caterer_headers = {
+            "Authorization": f"Bearer {self.food_caterer_token}"
         }
 
         self.customer_headers = {
@@ -184,6 +214,25 @@ class TestPackageRoutes(unittest.TestCase):
         db.session.commit()
 
         return menu_item
+
+    # ==========================================
+    # HELPER: CREATE ADD-ON
+    # ==========================================
+
+    def create_addon(self, caterer, addon_name, addon_type):
+
+        addon = AddOn(
+            caterer_id=caterer.id,
+            addon_name=addon_name,
+            description=f"{addon_name} description",
+            price=Decimal("5000.00"),
+            addon_type=addon_type
+        )
+
+        db.session.add(addon)
+        db.session.commit()
+
+        return addon
 
     # ==========================================
     # GET ALL PACKAGES
@@ -648,6 +697,296 @@ class TestPackageRoutes(unittest.TestCase):
             response.json["data"]["menu_items"],
             []
         )
+
+    # ==========================================
+    # PACKAGE ADD-ON TESTS
+    # ==========================================
+
+    def test_wedding_caterer_can_create_package_with_all_addon_types(self):
+
+        venue = self.create_addon(self.caterer, "Garden Venue", "venue")
+        chairs = self.create_addon(self.caterer, "Guest Chairs", "chairs")
+        tables = self.create_addon(self.caterer, "Dining Tables", "tables")
+        materials = self.create_addon(self.caterer, "Decor Materials", "materials")
+
+        data = self.valid_package_data.copy()
+        data["addon_ids"] = [
+            venue.id,
+            chairs.id,
+            tables.id,
+            materials.id
+        ]
+
+        response = self.client.post(
+            "/api/packages",
+            json=data,
+            headers=self.caterer_headers
+        )
+
+        self.assertEqual(response.status_code, 201)
+
+        returned_types = {
+            addon["addon_type"]
+            for addon in response.json["data"]["addons"]
+        }
+
+        self.assertEqual(
+            returned_types,
+            {"venue", "chairs", "tables", "materials"}
+        )
+
+    def test_corporate_caterer_can_use_chairs_and_tables(self):
+
+        chairs = self.create_addon(
+            self.other_caterer,
+            "Corporate Chairs",
+            "chairs"
+        )
+
+        tables = self.create_addon(
+            self.other_caterer,
+            "Conference Tables",
+            "tables"
+        )
+
+        data = {
+            "caterer_id": self.other_caterer.id,
+            "package_name": "Corporate Meeting Package",
+            "description": "Corporate event package",
+            "price_per_guest": "1800.00",
+            "minimum_guests": 10,
+            "maximum_guests": 100,
+            "addon_ids": [chairs.id, tables.id]
+        }
+
+        response = self.client.post(
+            "/api/packages",
+            json=data,
+            headers=self.other_caterer_headers
+        )
+
+        self.assertEqual(response.status_code, 201)
+
+        returned_ids = {
+            addon["id"]
+            for addon in response.json["data"]["addons"]
+        }
+
+        self.assertEqual(
+            returned_ids,
+            {chairs.id, tables.id}
+        )
+
+    def test_corporate_caterer_cannot_use_venue(self):
+
+        venue = self.create_addon(
+            self.other_caterer,
+            "Corporate Venue",
+            "venue"
+        )
+
+        data = {
+            "caterer_id": self.other_caterer.id,
+            "package_name": "Corporate Package",
+            "description": "Corporate event package",
+            "price_per_guest": "1500.00",
+            "minimum_guests": 10,
+            "maximum_guests": 100,
+            "addon_ids": [venue.id]
+        }
+
+        response = self.client.post(
+            "/api/packages",
+            json=data,
+            headers=self.other_caterer_headers
+        )
+
+        self.assertEqual(response.status_code, 400)
+
+    def test_corporate_caterer_cannot_use_materials(self):
+
+        materials = self.create_addon(
+            self.other_caterer,
+            "Decor Materials",
+            "materials"
+        )
+
+        data = {
+            "caterer_id": self.other_caterer.id,
+            "package_name": "Corporate Package",
+            "description": "Corporate event package",
+            "price_per_guest": "1500.00",
+            "minimum_guests": 10,
+            "maximum_guests": 100,
+            "addon_ids": [materials.id]
+        }
+
+        response = self.client.post(
+            "/api/packages",
+            json=data,
+            headers=self.other_caterer_headers
+        )
+
+        self.assertEqual(response.status_code, 400)
+
+    def test_food_caterer_cannot_add_non_food_components(self):
+
+        chairs = self.create_addon(
+            self.food_caterer,
+            "Food Event Chairs",
+            "chairs"
+        )
+
+        data = {
+            "caterer_id": self.food_caterer.id,
+            "package_name": "Food Package",
+            "description": "Food only package",
+            "price_per_guest": "1000.00",
+            "minimum_guests": 5,
+            "maximum_guests": 50,
+            "addon_ids": [chairs.id]
+        }
+
+        response = self.client.post(
+            "/api/packages",
+            json=data,
+            headers=self.food_caterer_headers
+        )
+
+        self.assertEqual(response.status_code, 400)
+
+    def test_caterer_cannot_use_another_caterers_addon(self):
+
+        other_addon = self.create_addon(
+            self.other_caterer,
+            "Other Caterer Chairs",
+            "chairs"
+        )
+
+        data = self.valid_package_data.copy()
+        data["addon_ids"] = [other_addon.id]
+
+        response = self.client.post(
+            "/api/packages",
+            json=data,
+            headers=self.caterer_headers
+        )
+
+        self.assertEqual(response.status_code, 400)
+
+    def test_caterer_can_update_package_addons(self):
+
+        venue = self.create_addon(
+            self.caterer,
+            "Wedding Venue",
+            "venue"
+        )
+
+        chairs = self.create_addon(
+            self.caterer,
+            "Wedding Chairs",
+            "chairs"
+        )
+
+        response = self.client.put(
+            f"/api/packages/{self.package.id}",
+            json={"addon_ids": [venue.id, chairs.id]},
+            headers=self.caterer_headers
+        )
+
+        self.assertEqual(response.status_code, 200)
+
+        returned_ids = {
+            addon["id"]
+            for addon in response.json["data"]["addons"]
+        }
+
+        self.assertEqual(
+            returned_ids,
+            {venue.id, chairs.id}
+        )
+
+    def test_caterer_can_clear_package_addons(self):
+
+        venue = self.create_addon(
+            self.caterer,
+            "Wedding Venue",
+            "venue"
+        )
+
+        initial_response = self.client.put(
+            f"/api/packages/{self.package.id}",
+            json={"addon_ids": [venue.id]},
+            headers=self.caterer_headers
+        )
+
+        self.assertEqual(initial_response.status_code, 200)
+
+        response = self.client.put(
+            f"/api/packages/{self.package.id}",
+            json={"addon_ids": []},
+            headers=self.caterer_headers
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json["data"]["addons"], [])
+        self.assertEqual(response.json["data"]["addon_ids"], [])
+
+    def test_duplicate_addon_ids_are_rejected(self):
+
+        chairs = self.create_addon(
+            self.caterer,
+            "Wedding Chairs",
+            "chairs"
+        )
+
+        data = self.valid_package_data.copy()
+        data["addon_ids"] = [chairs.id, chairs.id]
+
+        response = self.client.post(
+            "/api/packages",
+            json=data,
+            headers=self.caterer_headers
+        )
+
+        self.assertEqual(response.status_code, 400)
+
+    def test_invalid_addon_ids_are_rejected(self):
+
+        data = self.valid_package_data.copy()
+        data["addon_ids"] = [-1]
+
+        response = self.client.post(
+            "/api/packages",
+            json=data,
+            headers=self.caterer_headers
+        )
+
+        self.assertEqual(response.status_code, 400)
+
+    def test_legacy_addon_without_type_cannot_be_package_component(self):
+
+        legacy_addon = AddOn(
+            caterer_id=self.caterer.id,
+            addon_name="Waiter Service",
+            description="Legacy standalone service",
+            price=Decimal("8000.00"),
+            addon_type=None
+        )
+
+        db.session.add(legacy_addon)
+        db.session.commit()
+
+        data = self.valid_package_data.copy()
+        data["addon_ids"] = [legacy_addon.id]
+
+        response = self.client.post(
+            "/api/packages",
+            json=data,
+            headers=self.caterer_headers
+        )
+
+        self.assertEqual(response.status_code, 400)
 
 
 if __name__ == "__main__":

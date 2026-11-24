@@ -30,7 +30,7 @@ def get_or_create(model, lookup, defaults=None):
     """
     Return an existing record or create a new one.
 
-    Existing records are not overwritten.
+    Existing records are not overwritten automatically.
     """
 
     record = db.session.query(model).filter_by(**lookup).first()
@@ -142,6 +142,7 @@ def seed_caterers(users):
             "location": "Nairobi",
             "contact_number": "0711222333",
             "verification_status": "pending",
+            "category": "Wedding",
         },
     )
 
@@ -150,12 +151,21 @@ def seed_caterers(users):
         {"user_id": users["caterer_user_two"].id},
         {
             "business_name": "Taste Hub Events",
-            "description": "Professional catering for corporate and private events.",
+            "description": "Professional catering for corporate events.",
             "location": "Kiambu",
             "contact_number": "0722333444",
             "verification_status": "pending",
+            "category": "Corporate",
         },
     )
+
+    # IMPORTANT:
+    # get_or_create does not update existing records.
+    # Explicitly assign categories so existing caterers
+    # receive the correct categories when the seed runs again.
+
+    caterer_one.category = "Wedding"
+    caterer_two.category = "Corporate"
 
     return {
         "caterer_one": caterer_one,
@@ -395,6 +405,10 @@ def seed_add_ons(caterers):
 
     print("Seeding add-ons...")
 
+    # These are existing standalone services.
+    # They are deliberately left without addon_type.
+    # They are not venue, chairs, tables, or materials.
+
     juice_service = get_or_create(
         AddOn,
         {
@@ -507,7 +521,7 @@ def seed_booking_items(bookings, packages, add_ons):
         },
     )
 
-    # Second booking: waiter service add-on.
+    # Second booking: standalone waiter service add-on.
     get_or_create(
         BookingItem,
         {
