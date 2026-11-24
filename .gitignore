@@ -1,18 +1,32 @@
+
 # Python
 __pycache__/
 *.pyc
+*.pyo
+*$py.class
 
-# Database
+# Databases and local backups
 instance/
 *.db
+*.sqlite
+*.sqlite3
 
-# Environment variables
+# Environment variables and secrets
 .env
+.env.*
+!.env.example
 
 # Virtual environments
 .venv/
 venv/
 backend/.venv/
 backend/venv/
-__pycache__/
-*.pyc
+ENV/
+
+# Test and coverage output
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Local archives
+sokocater-backend.zip
