@@ -22,7 +22,8 @@ async function handleRes(res) {
   }
 
   if (!res.ok) {
-    throw new Error(data.message || data.error || "Request failed");
+    const msg = data.message || data.error || "Request failed";
+    throw new Error(typeof msg === "string" ? msg : JSON.stringify(msg));
   }
 
   return data;
