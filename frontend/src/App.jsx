@@ -4,7 +4,7 @@ import Navbar from "./components/Navbar";
 import ProtectedRoute from "./components/ProtectedRoute";
 
 import Home from "./pages/customer/Home";
-import CatererListing from "./pages/customer/CatererListing";
+import BrowseCaterers from "./pages/customer/BrowseCaterers";
 import CatererDetail from "./pages/customer/CatererDetail";
 import BookingForm from "./pages/customer/BookingForm";
 
@@ -20,20 +20,69 @@ function App() {
   return (
     <BrowserRouter>
       <Navbar />
+
       <Routes>
-        {/* Public - anyone can see */}
+        {/* Public routes */}
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
 
-        {/* Protected - must login first */}
-        <Route path="/" element={<ProtectedRoute><Home /></ProtectedRoute>} />
-        <Route path="/caterers" element={<ProtectedRoute><CatererListing /></ProtectedRoute>} />
-        <Route path="/caterer/:id" element={<ProtectedRoute><CatererDetail /></ProtectedRoute>} />
-        <Route path="/booking" element={<ProtectedRoute><BookingForm /></ProtectedRoute>} />
-        <Route path="/caterer/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-        <Route path="/caterer/profile" element={<ProtectedRoute><CatererForm /></ProtectedRoute>} />
+        {/* Customer routes */}
+        <Route
+          path="/"
+          element={
+            <ProtectedRoute>
+              <Home />
+            </ProtectedRoute>
+          }
+        />
 
-        {/* Wrong URL -> go to login */}
+        <Route
+          path="/caterers"
+          element={
+            <ProtectedRoute>
+              <BrowseCaterers />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/caterer/:id"
+          element={
+            <ProtectedRoute>
+              <CatererDetail />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/booking"
+          element={
+            <ProtectedRoute>
+              <BookingForm />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Caterer routes */}
+        <Route
+          path="/caterer/dashboard"
+          element={
+            <ProtectedRoute>
+              <Dashboard />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/caterer/profile"
+          element={
+            <ProtectedRoute>
+              <CatererForm />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Unknown routes */}
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     </BrowserRouter>

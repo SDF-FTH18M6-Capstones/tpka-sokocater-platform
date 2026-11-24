@@ -38,4 +38,5 @@ export function AuthProvider({ children }) {
   const logout = () => { localStorage.removeItem("sokocater_token"); localStorage.removeItem("sokocater_user"); setToken(null); setUser(null); };
   return <AuthContext.Provider value={{ user, token, isAuthenticated: Boolean(user && token), login, signup, logout, loading, error }}>{children}</AuthContext.Provider>;
 }
+// eslint-disable-next-line react-refresh/only-export-components
 export function useAuth() { return useContext(AuthContext); }

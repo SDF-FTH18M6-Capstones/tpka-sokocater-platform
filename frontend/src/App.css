@@ -974,3 +974,76 @@
   color: #285b42;
   font-weight: 700;
 }
+
+/* LOGIN AND SIGNUP PAGES */
+
+.auth-container {
+  min-height: calc(100vh - 80px);
+  padding: 75px 20px;
+  background: #faf9f5;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.auth-container h2 {
+  color: #174c35;
+  font-family: "Playfair Display", serif;
+  font-size: 34px;
+  text-align: center;
+  margin-bottom: 28px;
+}
+
+.auth-container form {
+  width: 100%;
+  max-width: 440px;
+  padding: 38px;
+  background: white;
+  border-radius: 16px;
+  box-shadow: 0 10px 35px rgba(0, 0, 0, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.auth-container input {
+  width: 100%;
+  padding: 14px 15px;
+  border: 1px solid #dce3dc;
+  border-radius: 8px;
+  background: white;
+  color: #26352e;
+  font: inherit;
+}
+
+.auth-container input:focus {
+  outline: none;
+  border-color: #285b42;
+  box-shadow: 0 0 0 3px rgba(40, 91, 66, 0.1);
+}
+
+.auth-container button {
+  width: 100%;
+  padding: 15px;
+  border: none;
+  border-radius: 8px;
+  background: #174c35;
+  color: white;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.auth-container button:hover {
+  background: #286b49;
+}
+
+@media (max-width: 600px) {
+  .auth-container {
+    padding: 45px 18px;
+  }
+
+  .auth-container form {
+    padding: 25px 20px;
+  }
+}

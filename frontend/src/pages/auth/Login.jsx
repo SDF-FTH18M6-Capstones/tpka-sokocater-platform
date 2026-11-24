@@ -6,7 +6,7 @@ function Login() {
   const { login, loading, error } = useAuth();
   const navigate = useNavigate();
   const handleChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
-  const handleSubmit = async (e) => { e.preventDefault(); try { await login(formData.email, formData.password); navigate("/"); } catch {} };
+  const handleSubmit = async (e) => { e.preventDefault(); try { await login(formData.email, formData.password); navigate("/"); } catch (err) { console.error("Login failed:", err.message); } };
   return (
     <div className="auth-container">
       <h2>Welcome Back to SokoCater</h2>

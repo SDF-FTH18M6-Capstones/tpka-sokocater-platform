@@ -268,6 +268,8 @@ def create_booking():
             caterer_id=caterer.id,
             event_type=booking_data["event_type"],
             event_date=booking_data["event_date"],
+            event_start_time=booking_data["event_start_time"],
+            event_end_time=booking_data["event_end_time"],
             event_location=booking_data["event_location"],
             guest_count=booking_data["guest_count"],
             estimated_total=estimated_total,

@@ -9,7 +9,7 @@ function Signup() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (formData.password !== formData.confirmPassword) { alert("Passwords do not match!"); return; }
-    try { await signup(formData.name, formData.email, formData.password); navigate("/"); } catch {}
+    try { await signup(formData.name, formData.email, formData.password); navigate("/"); } catch (err) { console.error("Signup failed:", err.message); }
   };
   return (
     <div className="auth-container">
