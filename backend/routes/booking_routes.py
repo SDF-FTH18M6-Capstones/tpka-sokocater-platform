@@ -1,3 +1,4 @@
+
 from decimal import Decimal
 
 from flask import Blueprint, jsonify, request
@@ -5,8 +6,16 @@ from flask_jwt_extended import jwt_required
 from sqlalchemy.exc import IntegrityError
 from marshmallow import ValidationError
 
+from notification_utils import add_notification
 from extensions import db
-from models import Booking, BookingItem, User, Caterer, Package
+from models import (
+    Booking,
+    BookingItem,
+    User,
+    Caterer,
+    Package,
+    Availability,
+)
 from auth_utils import get_authenticated_user
 from schemas.booking_schema import BookingSchema
 
@@ -29,6 +38,12 @@ ALLOWED_STATUS_TRANSITIONS = {
     "cancelled": [],
     "completed": []
 }
+
+ACTIVE_BOOKING_STATUSES = [
+    "pending",
+    "accepted",
+    "confirmed",
+]
 
 
 # --------------------------------------------------
@@ -98,6 +113,78 @@ def get_booking_package_item(booking_id):
     ).first()
 
 
+def validate_booking_availability(
+    caterer_id,
+    event_date,
+    event_start_time,
+    event_end_time,
+    exclude_booking_id=None
+):
+    """
+    Check that the requested event fits inside an available
+    caterer slot and does not overlap another active booking.
+
+    Returns an error message when the schedule is unavailable.
+    Returns None when the schedule is valid.
+    """
+
+    if not event_start_time or not event_end_time:
+        return "Event start time and end time are required."
+
+    if event_start_time >= event_end_time:
+        return "Event start time must be before event end time."
+
+    available_slot = Availability.query.filter(
+        Availability.caterer_id == caterer_id,
+        Availability.available_date == event_date,
+        Availability.status == "available",
+        Availability.start_time <= event_start_time,
+        Availability.end_time >= event_end_time
+    ).first()
+
+    if not available_slot:
+        return (
+            "The selected caterer is not available for the "
+            "requested date and time."
+        )
+
+    active_bookings = Booking.query.filter(
+        Booking.caterer_id == caterer_id,
+        Booking.event_date == event_date,
+        Booking.status.in_(ACTIVE_BOOKING_STATUSES)
+    ).all()
+
+    for existing_booking in active_bookings:
+
+        if (
+            exclude_booking_id is not None
+            and existing_booking.id == exclude_booking_id
+        ):
+            continue
+
+        if (
+            existing_booking.event_start_time is None
+            or existing_booking.event_end_time is None
+        ):
+            return (
+                "The caterer already has an active booking "
+                "on the selected date."
+            )
+
+        overlaps = (
+            existing_booking.event_start_time < event_end_time
+            and existing_booking.event_end_time > event_start_time
+        )
+
+        if overlaps:
+            return (
+                "The selected time conflicts with another "
+                "active booking."
+            )
+
+    return None
+
+
 # --------------------------------------------------
 # GET ALL BOOKINGS
 # --------------------------------------------------
@@ -109,19 +196,15 @@ def get_bookings():
     user = get_current_user()
 
     if not user:
-        return jsonify({
-            "error": "User not found."
-        }), 404
+        return jsonify({"error": "User not found."}), 404
 
-    role = user.role
-
-    if role == "customer":
+    if user.role == "customer":
 
         bookings = Booking.query.filter_by(
             customer_id=user.id
         ).all()
 
-    elif role == "caterer":
+    elif user.role == "caterer":
 
         caterer = Caterer.query.filter_by(
             user_id=user.id
@@ -157,27 +240,21 @@ def get_booking(booking_id):
     user = get_current_user()
 
     if not user:
-        return jsonify({
-            "error": "User not found."
-        }), 404
-
-    role = user.role
+        return jsonify({"error": "User not found."}), 404
 
     booking = db.session.get(Booking, booking_id)
 
     if not booking:
-        return jsonify({
-            "error": "Booking not found."
-        }), 404
+        return jsonify({"error": "Booking not found."}), 404
 
-    if role == "customer":
+    if user.role == "customer":
 
         if booking.customer_id != user.id:
             return jsonify({
                 "error": "You are not authorized to view this booking."
             }), 403
 
-    elif role == "caterer":
+    elif user.role == "caterer":
 
         caterer = Caterer.query.filter_by(
             user_id=user.id
@@ -215,13 +292,9 @@ def create_booking():
     user = get_current_user()
 
     if not user:
-        return jsonify({
-            "error": "User not found."
-        }), 404
+        return jsonify({"error": "User not found."}), 404
 
-    role = user.role
-
-    if role != "customer":
+    if user.role != "customer":
         return jsonify({
             "error": "Only customers can create bookings."
         }), 403
@@ -243,9 +316,7 @@ def create_booking():
         )
 
         if not caterer:
-            return jsonify({
-                "error": "Caterer not found."
-            }), 404
+            return jsonify({"error": "Caterer not found."}), 404
 
         package, error = validate_package(
             booking_data["package_id"],
@@ -254,9 +325,19 @@ def create_booking():
         )
 
         if error:
+            return jsonify({"error": error}), 400
+
+        availability_error = validate_booking_availability(
+            caterer_id=caterer.id,
+            event_date=booking_data["event_date"],
+            event_start_time=booking_data["event_start_time"],
+            event_end_time=booking_data["event_end_time"]
+        )
+
+        if availability_error:
             return jsonify({
-                "error": error
-            }), 400
+                "error": availability_error
+            }), 409
 
         estimated_total = (
             Decimal(str(package.price_per_guest))
@@ -288,6 +369,18 @@ def create_booking():
         )
 
         db.session.add(package_item)
+
+        # Notify the caterer about the new booking.
+        add_notification(
+            user_id=caterer.user_id,
+            message=(
+                f"You have received a new {booking.event_type} "
+                f"booking request."
+            ),
+            notification_type="booking_created"
+        )
+
+        # Save the booking, booking item and notification together.
         db.session.commit()
 
         return jsonify({
@@ -332,18 +425,12 @@ def update_booking(booking_id):
     user = get_current_user()
 
     if not user:
-        return jsonify({
-            "error": "User not found."
-        }), 404
-
-    role = user.role
+        return jsonify({"error": "User not found."}), 404
 
     booking = db.session.get(Booking, booking_id)
 
     if not booking:
-        return jsonify({
-            "error": "Booking not found."
-        }), 404
+        return jsonify({"error": "Booking not found."}), 404
 
     data = request.get_json(silent=True)
 
@@ -356,7 +443,7 @@ def update_booking(booking_id):
     # CATERER: UPDATE BOOKING STATUS
     # ----------------------------------------------
 
-    if role == "caterer":
+    if user.role == "caterer":
 
         caterer = Caterer.query.filter_by(
             user_id=user.id
@@ -386,10 +473,8 @@ def update_booking(booking_id):
 
         new_status = new_status.strip().lower()
 
-        current_status = booking.status
-
         allowed_statuses = ALLOWED_STATUS_TRANSITIONS.get(
-            current_status,
+            booking.status,
             []
         )
 
@@ -397,13 +482,25 @@ def update_booking(booking_id):
             return jsonify({
                 "error": (
                     f"Cannot change booking status from "
-                    f"'{current_status}' to '{new_status}'."
+                    f"'{booking.status}' to '{new_status}'."
                 )
             }), 400
 
         try:
 
             booking.status = new_status
+
+            # Notify the customer about the status change.
+            add_notification(
+                user_id=booking.customer_id,
+                message=(
+                    f"Your booking #{booking.id} status has been "
+                    f"updated to {new_status}."
+                ),
+                notification_type="booking_status_updated"
+            )
+
+            # Save the status change and notification together.
             db.session.commit()
 
             return jsonify({
@@ -428,7 +525,7 @@ def update_booking(booking_id):
     # CUSTOMER: UPDATE BOOKING DETAILS
     # ----------------------------------------------
 
-    elif role == "customer":
+    elif user.role == "customer":
 
         if booking.customer_id != user.id:
             return jsonify({
@@ -460,6 +557,8 @@ def update_booking(booking_id):
             "package_id",
             "event_type",
             "event_date",
+            "event_start_time",
+            "event_end_time",
             "event_location",
             "guest_count"
         }
@@ -481,14 +580,44 @@ def update_booking(booking_id):
                 booking.caterer_id
             )
 
+            new_event_date = booking_data.get(
+                "event_date",
+                booking.event_date
+            )
+
+            new_start_time = booking_data.get(
+                "event_start_time",
+                booking.event_start_time
+            )
+
+            new_end_time = booking_data.get(
+                "event_end_time",
+                booking.event_end_time
+            )
+
             new_guest_count = booking_data.get(
                 "guest_count",
                 booking.guest_count
             )
 
-            package_item = get_booking_package_item(
-                booking.id
-            )
+            schedule_changed = any([
+                new_caterer_id != booking.caterer_id,
+                new_event_date != booking.event_date,
+                new_start_time != booking.event_start_time,
+                new_end_time != booking.event_end_time
+            ])
+
+            if schedule_changed:
+
+                if not new_start_time or not new_end_time:
+                    return jsonify({
+                        "error": (
+                            "Both event start time and end time are "
+                            "required when changing the booking schedule."
+                        )
+                    }), 400
+
+            package_item = get_booking_package_item(booking.id)
 
             new_package_id = booking_data.get(
                 "package_id",
@@ -506,9 +635,7 @@ def update_booking(booking_id):
             )
 
             if not caterer:
-                return jsonify({
-                    "error": "Caterer not found."
-                }), 404
+                return jsonify({"error": "Caterer not found."}), 404
 
             package, error = validate_package(
                 new_package_id,
@@ -517,24 +644,40 @@ def update_booking(booking_id):
             )
 
             if error:
-                return jsonify({
-                    "error": error
-                }), 400
+                return jsonify({"error": error}), 400
+
+            if schedule_changed:
+
+                availability_error = validate_booking_availability(
+                    caterer_id=new_caterer_id,
+                    event_date=new_event_date,
+                    event_start_time=new_start_time,
+                    event_end_time=new_end_time,
+                    exclude_booking_id=booking.id
+                )
+
+                if availability_error:
+                    return jsonify({
+                        "error": availability_error
+                    }), 409
 
             booking.caterer_id = new_caterer_id
+            booking.event_date = new_event_date
+
+            if "event_start_time" in booking_data:
+                booking.event_start_time = new_start_time
+
+            if "event_end_time" in booking_data:
+                booking.event_end_time = new_end_time
 
             if "event_type" in booking_data:
                 booking.event_type = booking_data["event_type"]
-
-            if "event_date" in booking_data:
-                booking.event_date = booking_data["event_date"]
 
             if "event_location" in booking_data:
                 booking.event_location = booking_data["event_location"]
 
             booking.guest_count = new_guest_count
 
-            # Update the existing package item or create one if missing.
             if package_item:
 
                 package_item.package_id = package.id
@@ -553,7 +696,6 @@ def update_booking(booking_id):
 
                 db.session.add(package_item)
 
-            # Include all booking items when calculating the new total.
             db.session.flush()
 
             booking.estimated_total = get_booking_total(
@@ -607,13 +749,9 @@ def delete_booking(booking_id):
     user = get_current_user()
 
     if not user:
-        return jsonify({
-            "error": "User not found."
-        }), 404
+        return jsonify({"error": "User not found."}), 404
 
-    role = user.role
-
-    if role != "customer":
+    if user.role != "customer":
         return jsonify({
             "error": "Only customers can delete their bookings."
         }), 403
@@ -621,9 +759,7 @@ def delete_booking(booking_id):
     booking = db.session.get(Booking, booking_id)
 
     if not booking:
-        return jsonify({
-            "error": "Booking not found."
-        }), 404
+        return jsonify({"error": "Booking not found."}), 404
 
     if booking.customer_id != user.id:
         return jsonify({
