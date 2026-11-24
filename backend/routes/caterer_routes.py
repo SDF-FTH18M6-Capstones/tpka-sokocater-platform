@@ -199,6 +199,64 @@ def get_caterers():
         ]
     }), 200
 
+# --------------------------------------------------
+# COMPARE CATERERS - PUBLIC
+# GET /api/caterers/compare?ids=1,2,3
+# --------------------------------------------------
+
+@caterer_bp.route("/api/caterers/compare", methods=["GET"])
+def compare_caterers():
+    ids_param = request.args.get("ids")
+
+    if not ids_param:
+        return jsonify({
+            "error": "ids query param is required. Example: ?ids=1,2,3"
+        }), 400
+
+    try:
+        ids = [
+            int(part.strip())
+            for part in ids_param.split(",")
+            if part.strip()
+        ]
+    except ValueError:
+        return jsonify({
+            "error": "ids must be numbers separated by commas. Example: ?ids=1,2,3"
+        }), 400
+
+    # Remove duplicates, keep order
+    ids = list(dict.fromkeys(ids))
+
+    if len(ids) < 2 or len(ids) > 3:
+        return jsonify({
+            "error": "Compare requires 2 to 3 caterers."
+        }), 400
+
+    caterers = Caterer.query.filter(Caterer.id.in_(ids)).all()
+
+    if len(caterers) != len(ids):
+        return jsonify({
+            "error": "One or more caterers not found."
+        }), 404
+
+    # Keep them in the order the user asked for
+    caterers_by_id = {c.id: c for c in caterers}
+    caterers = [caterers_by_id[i] for i in ids]
+
+    categories = {c.category for c in caterers if c.category}
+
+    if len(categories) > 1:
+        return jsonify({
+            "error": "Caterers to compare must be in the same category."
+        }), 400
+
+    return jsonify({
+        "message": "Caterers retrieved successfully",
+        "data": [
+            serialize_caterer(c, include_packages=True)
+            for c in caterers
+        ]
+    }), 200
 
 # --------------------------------------------------
 # GET ONE CATERER - PUBLIC
