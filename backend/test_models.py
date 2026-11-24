@@ -20,6 +20,7 @@ from models import (
     Package,
     PackageItem,
     AddOn,
+    PackageAddOn,
     Booking,
     BookingItem,
     Availability,
@@ -85,6 +86,7 @@ class TestSokoCaterModels(unittest.TestCase):
             location="Nairobi",
             description="Professional catering services",
             contact_number="0712345678",
+            category="Wedding",
             verification_status="pending"
         )
 
@@ -155,7 +157,7 @@ class TestSokoCaterModels(unittest.TestCase):
         return booking
 
     # --------------------------------------------------
-    # TEST 1: ALL 15 MODELS CAN BE IMPORTED
+    # TEST 1: ALL 16 MODELS CAN BE IMPORTED
     # --------------------------------------------------
 
     def test_all_models_imported(self):
@@ -170,6 +172,7 @@ class TestSokoCaterModels(unittest.TestCase):
             Package,
             PackageItem,
             AddOn,
+            PackageAddOn,
             Booking,
             BookingItem,
             Availability,
@@ -178,10 +181,10 @@ class TestSokoCaterModels(unittest.TestCase):
             Notification
         ]
 
-        self.assertEqual(len(model_classes), 15)
+        self.assertEqual(len(model_classes), 16)
 
     # --------------------------------------------------
-    # TEST 2: ALL 15 DATABASE TABLES ARE CREATED
+    # TEST 2: ALL 16 DATABASE TABLES ARE CREATED
     # --------------------------------------------------
 
     def test_all_tables_created(self):
@@ -198,6 +201,7 @@ class TestSokoCaterModels(unittest.TestCase):
             "packages",
             "package_items",
             "add_ons",
+            "package_addons",
             "bookings",
             "booking_items",
             "availability",
@@ -272,13 +276,22 @@ class TestSokoCaterModels(unittest.TestCase):
         # Create add-on.
         addon = AddOn(
             caterer_id=caterer.id,
-            addon_name="Extra Drinks",
-            description="Additional drinks",
-            price=Decimal("200.00")
+            addon_name="Wedding Chairs",
+            description="Chairs for wedding guests",
+            price=Decimal("200.00"),
+            addon_type="chairs"
         )
 
         db.session.add(addon)
         db.session.flush()
+
+        # Connect the add-on to the package.
+        package_addon = PackageAddOn(
+            package_id=package.id,
+            addon_id=addon.id
+        )
+
+        db.session.add(package_addon)
 
         # Create booking.
         booking = self.create_sample_booking(customer, caterer)
@@ -343,6 +356,9 @@ class TestSokoCaterModels(unittest.TestCase):
         self.assertEqual(caterer_user.caterer_profile.id, caterer.id)
         self.assertEqual(caterer.user.id, caterer_user.id)
 
+        # Caterer category.
+        self.assertEqual(caterer.category, "Wedding")
+
         # Caterer and cuisines.
         self.assertEqual(len(caterer.cuisines), 2)
         self.assertEqual(caterer.cuisines[0].cuisine.cuisine_name, "Kenyan")
@@ -373,6 +389,12 @@ class TestSokoCaterModels(unittest.TestCase):
         # Caterer and add-on.
         self.assertEqual(caterer.addons[0].id, addon.id)
         self.assertEqual(addon.caterer.id, caterer.id)
+
+        # Package and add-on.
+        self.assertEqual(package.package_addons[0].id, package_addon.id)
+        self.assertEqual(package_addon.package.id, package.id)
+        self.assertEqual(package_addon.addon.id, addon.id)
+        self.assertEqual(addon.package_addons[0].package.id, package.id)
 
         # Customer and booking.
         self.assertEqual(customer.bookings[0].id, booking.id)
@@ -468,6 +490,7 @@ class TestSokoCaterModels(unittest.TestCase):
             user_id=user2.id,
             business_name="Second Catering Business",
             location="Nairobi",
+            category="Corporate",
             verification_status="pending"
         )
 
@@ -587,6 +610,7 @@ class TestSokoCaterModels(unittest.TestCase):
             business_name="Another Catering Business",
             location="Nairobi",
             contact_number="0700000000",
+            category="Wedding",
             verification_status="pending"
         )
 
@@ -1035,6 +1059,128 @@ class TestSokoCaterModels(unittest.TestCase):
         )
 
         db.session.add(review2)
+
+        with self.assertRaises(IntegrityError):
+            db.session.commit()
+
+        db.session.rollback()
+
+    # --------------------------------------------------
+    # TEST 27: VALID CATERER CATEGORIES ARE ACCEPTED
+    # --------------------------------------------------
+
+    def test_valid_caterer_categories_accepted(self):
+
+        categories = ["Food", "Wedding", "Corporate"]
+
+        for index, category in enumerate(categories):
+
+            user = User(
+                full_name=f"Caterer {index}",
+                email=f"caterer{index}@example.com",
+                password_hash="hashed_password",
+                role="caterer"
+            )
+
+            db.session.add(user)
+            db.session.flush()
+
+            caterer = CatererProfile(
+                user_id=user.id,
+                business_name=f"Business {index}",
+                location="Nairobi",
+                category=category,
+                verification_status="pending"
+            )
+
+            db.session.add(caterer)
+
+        db.session.commit()
+
+        self.assertEqual(
+            CatererProfile.query.count(),
+            3
+        )
+
+    # --------------------------------------------------
+    # TEST 28: INVALID CATERER CATEGORY IS REJECTED
+    # --------------------------------------------------
+
+    def test_invalid_caterer_category_rejected(self):
+
+        user = User(
+            full_name="Invalid Caterer",
+            email="invalidcaterer@example.com",
+            password_hash="hashed_password",
+            role="caterer"
+        )
+
+        db.session.add(user)
+        db.session.flush()
+
+        caterer = CatererProfile(
+            user_id=user.id,
+            business_name="Invalid Business",
+            location="Nairobi",
+            category="Private Event",
+            verification_status="pending"
+        )
+
+        db.session.add(caterer)
+
+        with self.assertRaises(IntegrityError):
+            db.session.commit()
+
+        db.session.rollback()
+
+    # --------------------------------------------------
+    # TEST 29: VALID ADD-ON TYPES ARE ACCEPTED
+    # --------------------------------------------------
+
+    def test_valid_addon_types_accepted(self):
+
+        user, caterer = self.create_sample_caterer()
+
+        addon_types = [
+            "venue",
+            "chairs",
+            "tables",
+            "materials"
+        ]
+
+        for addon_type in addon_types:
+
+            addon = AddOn(
+                caterer_id=caterer.id,
+                addon_name=f"{addon_type.title()} Service",
+                description=f"{addon_type.title()} component",
+                price=Decimal("1000.00"),
+                addon_type=addon_type
+            )
+
+            db.session.add(addon)
+
+        db.session.commit()
+
+        self.assertEqual(AddOn.query.count(), 4)
+
+    # --------------------------------------------------
+    # TEST 30: INVALID ADD-ON TYPE IS REJECTED
+    # --------------------------------------------------
+
+    def test_invalid_addon_type_rejected(self):
+
+        user, caterer = self.create_sample_caterer()
+
+        addon = AddOn(
+            caterer_id=caterer.id,
+            addon_name="Invalid Component",
+            description="Invalid component type",
+            price=Decimal("1000.00"),
+            addon_type="private_event"
+        )
+
+        db.session.add(addon)
 
         with self.assertRaises(IntegrityError):
             db.session.commit()

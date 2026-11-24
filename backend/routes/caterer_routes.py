@@ -1,12 +1,16 @@
+
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import jwt_required
 from sqlalchemy.exc import IntegrityError
 from marshmallow import ValidationError
 
 from extensions import db
-from models import Caterer
+from models import Caterer, Package
 from auth_utils import get_authenticated_user
-from schemas.caterer_schema import CatererSchema
+from schemas.caterer_schema import (
+    CatererSchema,
+    ALLOWED_CATEGORIES
+)
 
 
 caterer_bp = Blueprint("caterers", __name__)
@@ -20,7 +24,7 @@ caterers_schema = CatererSchema(many=True)
 # --------------------------------------------------
 
 def serialize_package(package):
-    """Return package information together with its selected menu items."""
+    """Return package information together with selected menu items."""
 
     menu_items = [
         {
@@ -44,18 +48,14 @@ def serialize_package(package):
         "minimum_guests": package.minimum_guests,
         "maximum_guests": package.maximum_guests,
         "menu_items": menu_items,
-        # alias for frontend that expects "menus"
-        "menus": menu_items,
+        "menus": menu_items
     }
 
+
 def serialize_caterer(caterer, include_packages=False):
-    """Serialize a caterer with its package price range."""
+    """Serialize a caterer with category, packages and price range."""
 
     caterer_data = caterer_schema.dump(caterer)
-
-    # Include category when the model has that field.
-    if hasattr(caterer, "category"):
-        caterer_data["category"] = caterer.category
 
     packages = caterer.packages
 
@@ -93,38 +93,73 @@ def get_caterers():
 
     query = Caterer.query
 
-    # YOUR FILTER - re-added
+    # PRICE FILTERING
+
     min_price = request.args.get("min_price")
     max_price = request.args.get("max_price")
 
     try:
-        min_price = float(min_price) if min_price is not None else None
-        max_price = float(max_price) if max_price is not None else None
+        min_price = (
+            float(min_price)
+            if min_price is not None
+            else None
+        )
+
+        max_price = (
+            float(max_price)
+            if max_price is not None
+            else None
+        )
+
     except ValueError:
         return jsonify({
             "error": "min_price and max_price must be numbers"
         }), 400
 
     if min_price is not None and min_price < 0:
-        return jsonify({"error": "min_price cannot be negative"}), 400
+        return jsonify({
+            "error": "min_price cannot be negative"
+        }), 400
+
     if max_price is not None and max_price < 0:
-        return jsonify({"error": "max_price cannot be negative"}), 400
-    if min_price is not None and max_price is not None and min_price > max_price:
-        return jsonify({"error": "min_price cannot be greater than max_price"}), 400
+        return jsonify({
+            "error": "max_price cannot be negative"
+        }), 400
+
+    if (
+        min_price is not None
+        and max_price is not None
+        and min_price > max_price
+    ):
+        return jsonify({
+            "error": "min_price cannot be greater than max_price"
+        }), 400
 
     if min_price is not None or max_price is not None:
-        from models import Package
-        query = query.join(Package, Package.caterer_id == Caterer.id)
+
+        query = query.join(
+            Package,
+            Package.caterer_id == Caterer.id
+        )
+
         if min_price is not None:
-            query = query.filter(Package.price_per_guest >= min_price)
+            query = query.filter(
+                Package.price_per_guest >= min_price
+            )
+
         if max_price is not None:
-            query = query.filter(Package.price_per_guest <= max_price)
+            query = query.filter(
+                Package.price_per_guest <= max_price
+            )
+
         query = query.distinct()
 
-    # KATE'S FILTER - keep as-is below this
+    # CATEGORY FILTERING
+
     category = request.args.get("category")
 
     if category is not None:
+
         category = category.strip()
 
         if not category:
@@ -132,17 +167,26 @@ def get_caterers():
                 "error": "Category cannot be empty"
             }), 400
 
-        if not hasattr(Caterer, "category"):
+        normalized_category = next(
+            (
+                allowed
+                for allowed in ALLOWED_CATEGORIES
+                if allowed.lower() == category.lower()
+            ),
+            None
+        )
+
+        if normalized_category is None:
             return jsonify({
                 "error": (
-                    "Category filtering is not available yet. "
-                    "The caterer category field must first be added "
-                    "to the database model."
+                    "Invalid category. "
+                    "Choose Food, Wedding, or Corporate."
                 )
-            }), 501
+            }), 400
 
         query = query.filter(
-            db.func.lower(Caterer.category) == category.lower()
+            db.func.lower(Caterer.category)
+            == normalized_category.lower()
         )
 
     caterers = query.all()
@@ -160,7 +204,10 @@ def get_caterers():
 # GET ONE CATERER - PUBLIC
 # --------------------------------------------------
 
-@caterer_bp.route("/api/caterers/<int:caterer_id>", methods=["GET"])
+@caterer_bp.route(
+    "/api/caterers/<int:caterer_id>",
+    methods=["GET"]
+)
 def get_caterer(caterer_id):
 
     caterer = db.session.get(Caterer, caterer_id)
@@ -227,8 +274,6 @@ def create_caterer():
                 "error": "You already have a caterer profile"
             }), 409
 
-        validated_data.pop("verification_status", None)
-
         caterer = Caterer(
             **validated_data,
             verification_status="pending"
@@ -261,7 +306,10 @@ def create_caterer():
 # UPDATE CATERER PROFILE - OWNER ONLY
 # --------------------------------------------------
 
-@caterer_bp.route("/api/caterers/<int:caterer_id>", methods=["PUT"])
+@caterer_bp.route(
+    "/api/caterers/<int:caterer_id>",
+    methods=["PUT"]
+)
 @jwt_required()
 def update_caterer(caterer_id):
 
@@ -317,9 +365,6 @@ def update_caterer(caterer_id):
             partial=True
         )
 
-        validated_data.pop("user_id", None)
-        validated_data.pop("verification_status", None)
-
         for field, value in validated_data.items():
             setattr(caterer, field, value)
 
@@ -349,7 +394,10 @@ def update_caterer(caterer_id):
 # DELETE CATERER PROFILE - OWNER ONLY
 # --------------------------------------------------
 
-@caterer_bp.route("/api/caterers/<int:caterer_id>", methods=["DELETE"])
+@caterer_bp.route(
+    "/api/caterers/<int:caterer_id>",
+    methods=["DELETE"]
+)
 @jwt_required()
 def delete_caterer(caterer_id):
 

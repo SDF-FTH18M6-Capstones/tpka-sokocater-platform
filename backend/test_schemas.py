@@ -25,7 +25,8 @@ class TestCatererSchema(unittest.TestCase):
             "business_name": "Kate Catering",
             "description": "Professional catering services",
             "location": "Nairobi",
-            "contact_number": "0712345678"
+            "contact_number": "0712345678",
+            "category": "Food"
         }
 
     def test_valid_caterer_data(self):
@@ -33,6 +34,7 @@ class TestCatererSchema(unittest.TestCase):
 
         self.assertEqual(result["user_id"], 1)
         self.assertEqual(result["business_name"], "Kate Catering")
+        self.assertEqual(result["category"], "Food")
 
     def test_missing_business_name(self):
         data = self.valid_data()

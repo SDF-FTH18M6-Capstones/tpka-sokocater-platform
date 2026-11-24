@@ -1,3 +1,4 @@
+
 import unittest
 from datetime import date
 from decimal import Decimal
@@ -34,7 +35,6 @@ class TestAddOnRoutes(unittest.TestCase):
 
         self.client = self.app.test_client()
 
-        # Create users.
         self.caterer_user = self.create_user(
             "caterer@example.com", "caterer"
         )
@@ -51,20 +51,15 @@ class TestAddOnRoutes(unittest.TestCase):
             "no-profile@example.com", "caterer"
         )
 
-        # Create caterer profiles.
-        self.caterer = self.create_caterer(
-            self.caterer_user
-        )
+        self.caterer = self.create_caterer(self.caterer_user)
 
         self.other_caterer = self.create_caterer(
             self.other_caterer_user,
             "Other Catering Business"
         )
 
-        # Create an add-on.
         self.addon = self.create_addon()
 
-        # Create a booking for testing deletion conflicts.
         self.booking = Booking(
             customer_id=self.customer_user.id,
             caterer_id=self.caterer.id,
@@ -78,22 +73,12 @@ class TestAddOnRoutes(unittest.TestCase):
         db.session.add(self.booking)
         db.session.commit()
 
-        # Create tokens.
-        self.caterer_headers = self.create_token(
-            self.caterer_user
-        )
-
-        self.customer_headers = self.create_token(
-            self.customer_user
-        )
-
+        self.caterer_headers = self.create_token(self.caterer_user)
+        self.customer_headers = self.create_token(self.customer_user)
         self.other_caterer_headers = self.create_token(
             self.other_caterer_user
         )
-
-        self.no_profile_headers = self.create_token(
-            self.no_profile_user
-        )
+        self.no_profile_headers = self.create_token(self.no_profile_user)
 
     def tearDown(self):
 
@@ -179,6 +164,25 @@ class TestAddOnRoutes(unittest.TestCase):
             "price": "200.00"
         }
 
+    def set_caterer_category(self, caterer, category):
+
+        caterer.category = category
+        db.session.commit()
+
+    def create_typed_addon(self, addon_type, name=None):
+
+        data = self.valid_addon_data()
+        data["addon_type"] = addon_type
+
+        if name:
+            data["addon_name"] = name
+
+        return self.client.post(
+            "/api/addons",
+            json=data,
+            headers=self.caterer_headers
+        )
+
     # ==================================================
     # PUBLIC GET ROUTES
     # ==================================================
@@ -256,11 +260,9 @@ class TestAddOnRoutes(unittest.TestCase):
 
     def test_caterer_without_profile_cannot_create_addon(self):
 
-        data = self.valid_addon_data()
-
         response = self.client.post(
             "/api/addons",
-            json=data,
+            json=self.valid_addon_data(),
             headers=self.no_profile_headers
         )
 
@@ -268,9 +270,7 @@ class TestAddOnRoutes(unittest.TestCase):
 
     def test_caterer_cannot_create_addon_for_another_caterer(self):
 
-        data = self.valid_addon_data(
-            self.other_caterer
-        )
+        data = self.valid_addon_data(self.other_caterer)
 
         response = self.client.post(
             "/api/addons",
@@ -323,6 +323,170 @@ class TestAddOnRoutes(unittest.TestCase):
 
         response = self.client.post(
             "/api/addons",
+            headers=self.caterer_headers
+        )
+
+        self.assertEqual(response.status_code, 400)
+
+    # ==================================================
+    # CATEGORY-SPECIFIC COMPONENT RULES
+    # ==================================================
+
+    def test_wedding_caterer_can_create_all_component_types(self):
+
+        self.set_caterer_category(self.caterer, "Wedding")
+
+        component_types = [
+            "venue",
+            "chairs",
+            "tables",
+            "materials"
+        ]
+
+        for component_type in component_types:
+
+            with self.subTest(component_type=component_type):
+
+                response = self.create_typed_addon(
+                    component_type,
+                    f"Wedding {component_type}"
+                )
+
+                self.assertEqual(
+                    response.status_code,
+                    201,
+                    response.get_json()
+                )
+
+                self.assertEqual(
+                    response.get_json()["data"]["addon_type"],
+                    component_type
+                )
+
+    def test_corporate_caterer_can_create_chairs_and_tables(self):
+
+        self.set_caterer_category(self.caterer, "Corporate")
+
+        for component_type in ["chairs", "tables"]:
+
+            with self.subTest(component_type=component_type):
+
+                response = self.create_typed_addon(
+                    component_type,
+                    f"Corporate {component_type}"
+                )
+
+                self.assertEqual(
+                    response.status_code,
+                    201,
+                    response.get_json()
+                )
+
+                self.assertEqual(
+                    response.get_json()["data"]["addon_type"],
+                    component_type
+                )
+
+    def test_corporate_caterer_cannot_create_venue_or_materials(self):
+
+        self.set_caterer_category(self.caterer, "Corporate")
+
+        for component_type in ["venue", "materials"]:
+
+            with self.subTest(component_type=component_type):
+
+                response = self.create_typed_addon(
+                    component_type,
+                    f"Corporate {component_type}"
+                )
+
+                self.assertEqual(response.status_code, 400)
+
+    def test_food_caterer_cannot_create_non_food_components(self):
+
+        self.set_caterer_category(self.caterer, "Food")
+
+        for component_type in [
+            "venue",
+            "chairs",
+            "tables",
+            "materials"
+        ]:
+
+            with self.subTest(component_type=component_type):
+
+                response = self.create_typed_addon(
+                    component_type,
+                    f"Food {component_type}"
+                )
+
+                self.assertEqual(response.status_code, 400)
+
+    def test_create_addon_with_invalid_component_type(self):
+
+        data = self.valid_addon_data()
+        data["addon_type"] = "decoration"
+
+        response = self.client.post(
+            "/api/addons",
+            json=data,
+            headers=self.caterer_headers
+        )
+
+        self.assertEqual(response.status_code, 400)
+
+    def test_create_untyped_addon_remains_supported(self):
+
+        data = self.valid_addon_data()
+
+        response = self.client.post(
+            "/api/addons",
+            json=data,
+            headers=self.caterer_headers
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertIsNone(
+            response.get_json()["data"]["addon_type"]
+        )
+
+    def test_update_addon_with_allowed_component_type(self):
+
+        self.set_caterer_category(self.caterer, "Wedding")
+
+        response = self.client.put(
+            f"/api/addons/{self.addon.id}",
+            json={"addon_type": "venue"},
+            headers=self.caterer_headers
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.get_json()["data"]["addon_type"],
+            "venue"
+        )
+
+    def test_update_addon_with_disallowed_component_type(self):
+
+        self.set_caterer_category(self.caterer, "Corporate")
+
+        response = self.client.put(
+            f"/api/addons/{self.addon.id}",
+            json={"addon_type": "venue"},
+            headers=self.caterer_headers
+        )
+
+        self.assertEqual(response.status_code, 400)
+
+        db.session.refresh(self.addon)
+
+        self.assertIsNone(self.addon.addon_type)
+
+    def test_update_addon_with_invalid_component_type(self):
+
+        response = self.client.put(
+            f"/api/addons/{self.addon.id}",
+            json={"addon_type": "decoration"},
             headers=self.caterer_headers
         )
 

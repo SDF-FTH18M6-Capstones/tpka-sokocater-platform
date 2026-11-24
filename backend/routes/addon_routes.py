@@ -1,4 +1,3 @@
-
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import jwt_required
 from sqlalchemy.exc import IntegrityError
@@ -7,13 +6,68 @@ from marshmallow import ValidationError
 from extensions import db
 from models import AddOn, Caterer
 from auth_utils import get_authenticated_user
-from schemas.addon_schema import AddOnSchema
+from schemas.addon_schema import (
+    AddOnSchema,
+    ALLOWED_ADDON_TYPES
+)
 
 
 addon_bp = Blueprint("addons", __name__)
 
 addon_schema = AddOnSchema()
 addons_schema = AddOnSchema(many=True)
+
+
+# ==================================================
+# CATEGORY AND COMPONENT RULES
+# ==================================================
+
+ALLOWED_ADDON_TYPES_BY_CATEGORY = {
+    "Food": set(),
+    "Wedding": {
+        "venue",
+        "chairs",
+        "tables",
+        "materials"
+    },
+    "Corporate": {
+        "chairs",
+        "tables"
+    }
+}
+
+
+def validate_addon_type_for_category(addon_type, category):
+
+    # Untyped add-ons remain supported for existing standalone
+    # services such as juice service and waiter service.
+    if addon_type is None:
+        return None
+
+    if addon_type not in ALLOWED_ADDON_TYPES:
+        return "Invalid add-on type."
+
+    # Older test records and legacy caterer profiles may not
+    # have a category assigned yet. The type itself is still
+    # checked above.
+    if category is None:
+        return None
+
+    if category not in ALLOWED_ADDON_TYPES_BY_CATEGORY:
+        return "Caterer has an invalid category."
+
+    allowed_types = ALLOWED_ADDON_TYPES_BY_CATEGORY[category]
+
+    if addon_type not in allowed_types:
+        if category == "Food":
+            return "Food caterers cannot create non-food package components."
+
+        if category == "Corporate":
+            return "Corporate caterers can only offer chairs and tables as components."
+
+        return "This add-on type is not allowed for this caterer category."
+
+    return None
 
 
 # ==================================================
@@ -96,6 +150,16 @@ def create_addon():
                 "error": "You can only create add-ons for your own profile"
             }), 403
 
+        addon_type_error = validate_addon_type_for_category(
+            validated_data.get("addon_type"),
+            current_caterer.category
+        )
+
+        if addon_type_error:
+            return jsonify({
+                "error": addon_type_error
+            }), 400
+
         addon = AddOn(**validated_data)
 
         db.session.add(addon)
@@ -174,6 +238,23 @@ def update_addon(addon_id):
                 "error": "You cannot transfer an add-on to another caterer"
             }), 403
 
+        # Validate the final type, not only the fields in this request.
+        # This also protects updates to existing typed add-ons.
+        final_addon_type = validated_data.get(
+            "addon_type",
+            addon.addon_type
+        )
+
+        addon_type_error = validate_addon_type_for_category(
+            final_addon_type,
+            current_caterer.category
+        )
+
+        if addon_type_error:
+            return jsonify({
+                "error": addon_type_error
+            }), 400
+
         for field, value in validated_data.items():
             setattr(addon, field, value)
 
@@ -238,5 +319,5 @@ def delete_addon(addon_id):
         db.session.rollback()
 
         return jsonify({
-            "error": "Cannot delete add-on because related bookings exist"
+            "error": "Cannot delete add-on because related records exist"
         }), 409

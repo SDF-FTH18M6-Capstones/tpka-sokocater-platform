@@ -4,7 +4,15 @@ from sqlalchemy.exc import IntegrityError
 from marshmallow import ValidationError
 
 from extensions import db
-from models import Package, Caterer, Menu, MenuItem, PackageItem
+from models import (
+    Package,
+    Caterer,
+    Menu,
+    MenuItem,
+    PackageItem,
+    AddOn,
+    PackageAddOn
+)
 from auth_utils import get_authenticated_user
 from schemas.package_schema import PackageSchema
 
@@ -13,6 +21,19 @@ package_bp = Blueprint("packages", __name__)
 
 package_schema = PackageSchema()
 packages_schema = PackageSchema(many=True)
+
+
+# --------------------------------------------------
+# CATEGORY RULES
+# --------------------------------------------------
+
+ALLOWED_CATEGORIES = {"Food", "Wedding", "Corporate"}
+
+ALLOWED_ADDON_TYPES = {
+    "Food": set(),
+    "Wedding": {"venue", "chairs", "tables", "materials"},
+    "Corporate": {"chairs", "tables"}
+}
 
 
 # --------------------------------------------------
@@ -33,7 +54,7 @@ def get_current_caterer():
 
 
 def serialize_package(package):
-    """Serialize a package, including its selected menu items."""
+    """Serialize a package, including its food items and add-ons."""
 
     package_data = package_schema.dump(package)
 
@@ -50,7 +71,36 @@ def serialize_package(package):
         if package_item.menu_item is not None
     ]
 
+    package_data["addons"] = [
+        {
+            "id": package_addon.addon.id,
+            "addon_name": package_addon.addon.addon_name,
+            "description": package_addon.addon.description,
+            "price": str(package_addon.addon.price),
+            "addon_type": package_addon.addon.addon_type
+        }
+        for package_addon in package.package_addons
+        if package_addon.addon is not None
+    ]
+
+    package_data["addon_ids"] = [
+        package_addon.addon_id
+        for package_addon in package.package_addons
+    ]
+
     return package_data
+
+
+def validate_caterer_category(caterer):
+    """Ensure the caterer has one of the supported categories."""
+
+    if caterer.category not in ALLOWED_CATEGORIES:
+        raise ValidationError({
+            "category": [
+                "Your catering profile must have a valid category "
+                "before you can manage packages."
+            ]
+        })
 
 
 def validate_menu_item_ids(menu_item_ids, caterer_id):
@@ -99,11 +149,92 @@ def validate_menu_item_ids(menu_item_ids, caterer_id):
     if len(menu_items) != len(menu_item_ids):
         raise ValidationError({
             "menu_item_ids": [
-                "One or more menu items do not exist or do not belong to your catering profile."
+                "One or more menu items do not exist or do not belong "
+                "to your catering profile."
             ]
         })
 
     return menu_items
+
+
+def validate_addon_ids(addon_ids, caterer):
+    """
+    Validate add-on IDs and enforce the caterer's category rules.
+
+    Every selected add-on must:
+    - Have a unique positive integer ID.
+    - Belong to the authenticated caterer.
+    - Have a component type allowed for that caterer's category.
+    """
+
+    if not isinstance(addon_ids, list):
+        raise ValidationError({
+            "addon_ids": ["Must be a list of add-on IDs."]
+        })
+
+    if any(
+        isinstance(addon_id, bool)
+        or not isinstance(addon_id, int)
+        or addon_id < 1
+        for addon_id in addon_ids
+    ):
+        raise ValidationError({
+            "addon_ids": [
+                "Every add-on ID must be a positive integer."
+            ]
+        })
+
+    if len(addon_ids) != len(set(addon_ids)):
+        raise ValidationError({
+            "addon_ids": [
+                "Duplicate add-on IDs are not allowed."
+            ]
+        })
+
+    validate_caterer_category(caterer)
+
+    if not addon_ids:
+        return []
+
+    allowed_types = ALLOWED_ADDON_TYPES[caterer.category]
+
+    if not allowed_types:
+        raise ValidationError({
+            "addon_ids": [
+                "Food caterers can only include food/menu items "
+                "in their packages."
+            ]
+        })
+
+    addons = AddOn.query.filter(
+        AddOn.id.in_(addon_ids),
+        AddOn.caterer_id == caterer.id
+    ).all()
+
+    if len(addons) != len(addon_ids):
+        raise ValidationError({
+            "addon_ids": [
+                "One or more add-ons do not exist or do not belong "
+                "to your catering profile."
+            ]
+        })
+
+    invalid_addons = [
+        addon.addon_name
+        for addon in addons
+        if addon.addon_type not in allowed_types
+    ]
+
+    if invalid_addons:
+        raise ValidationError({
+            "addon_ids": [
+                f"These add-ons are not allowed for the "
+                f"{caterer.category} category: "
+                f"{', '.join(invalid_addons)}."
+            ]
+        })
+
+    return addons
 
 
 def replace_package_menu_items(package, menu_items):
@@ -118,6 +249,22 @@ def replace_package_menu_items(package, menu_items):
             PackageItem(
                 package_id=package.id,
                 menu_item_id=menu_item.id
+            )
+        )
+
+
+def replace_package_addons(package, addons):
+    """Replace the add-on associations for a package."""
+
+    PackageAddOn.query.filter_by(
+        package_id=package.id
+    ).delete(synchronize_session=False)
+
+    for addon in addons:
+        db.session.add(
+            PackageAddOn(
+                package_id=package.id,
+                addon_id=addon.id
             )
         )
 
@@ -183,7 +330,6 @@ def create_package():
 
     data = dict(data)
 
-    # A caterer cannot create a package for another caterer.
     if (
         "caterer_id" in data
         and data["caterer_id"] != current_caterer.id
@@ -193,20 +339,25 @@ def create_package():
         }), 403
 
     try:
-        # Remove menu item IDs before Marshmallow validation.
         menu_item_ids = data.pop("menu_item_ids", [])
+        addon_ids = data.pop("addon_ids", [])
 
-        # Use the authenticated caterer's ID, not the client's value.
+        validate_caterer_category(current_caterer)
+
         data["caterer_id"] = current_caterer.id
 
         validated_data = package_schema.load(data)
 
-        # The owner is explicitly assigned below.
         validated_data.pop("caterer_id", None)
 
         menu_items = validate_menu_item_ids(
             menu_item_ids,
             current_caterer.id
+        )
+
+        addons = validate_addon_ids(
+            addon_ids,
+            current_caterer
         )
 
         package = Package(
@@ -218,6 +369,7 @@ def create_package():
         db.session.flush()
 
         replace_package_menu_items(package, menu_items)
+        replace_package_addons(package, addons)
 
         db.session.commit()
 
@@ -282,16 +434,17 @@ def update_package(package_id):
 
     data = dict(data)
 
-    # Never allow a package to be transferred to another caterer.
     if "caterer_id" in data:
         return jsonify({
             "error": "You cannot transfer a package to another caterer"
         }), 403
 
     try:
-        # Menu items are optional during a package update.
         menu_items_provided = "menu_item_ids" in data
         menu_item_ids = data.pop("menu_item_ids", None)
+
+        addons_provided = "addon_ids" in data
+        addon_ids = data.pop("addon_ids", None)
 
         validated_data = package_schema.load(
             data,
@@ -300,7 +453,6 @@ def update_package(package_id):
 
         validated_data.pop("caterer_id", None)
 
-        # Validate the combined guest range.
         new_minimum_guests = validated_data.get(
             "minimum_guests",
             package.minimum_guests
@@ -318,12 +470,14 @@ def update_package(package_id):
             return jsonify({
                 "error": {
                     "maximum_guests": [
-                        "Maximum guests must be greater than or equal to minimum guests."
+                        "Maximum guests must be greater than or equal "
+                        "to minimum guests."
                     ]
                 }
             }), 400
 
         menu_items = None
+        addons = None
 
         if menu_items_provided:
             menu_items = validate_menu_item_ids(
@@ -331,11 +485,20 @@ def update_package(package_id):
                 current_caterer.id
             )
 
+        if addons_provided:
+            addons = validate_addon_ids(
+                addon_ids,
+                current_caterer
+            )
+
         for field, value in validated_data.items():
             setattr(package, field, value)
 
         if menu_items_provided:
             replace_package_menu_items(package, menu_items)
+
+        if addons_provided:
+            replace_package_addons(package, addons)
 
         db.session.commit()
 
