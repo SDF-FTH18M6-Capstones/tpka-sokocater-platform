@@ -24,9 +24,11 @@ function Navbar() {
       </div>
 
       <div className="nav-actions">
-        <Link to="/caterer/dashboard" className="provider-link">
-          Caterer Portal
-        </Link>
+        {user?.role === "caterer" && (
+          <Link to="/caterer/dashboard" className="provider-link">
+            Caterer Portal
+           </Link>
+        )}
         {isAuthenticated ? (
           <>
             <span style={{ fontSize: "14px" }}>{user?.full_name || user?.email}</span>

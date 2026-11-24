@@ -58,11 +58,11 @@ function App() {
           }
         />
 
-        {/* Caterer routes */}
+        {/* Caterer routes - CATERER ONLY */}
         <Route
           path="/caterer/dashboard"
           element={
-            <ProtectedRoute>
+            <ProtectedRoute allowedRoles={["caterer", "admin"]}>
               <Dashboard />
             </ProtectedRoute>
           }
@@ -71,16 +71,16 @@ function App() {
         <Route
           path="/caterer/profile"
           element={
-            <ProtectedRoute>
+            <ProtectedRoute allowedRoles={["caterer", "admin"]}>
               <CatererForm />
             </ProtectedRoute>
           }
         />
 
-                <Route
+        <Route
           path="/caterer/create-package"
           element={
-            <ProtectedRoute>
+            <ProtectedRoute allowedRoles={["caterer", "admin"]}>
               <CreatePackage />
             </ProtectedRoute>
           }
@@ -89,7 +89,7 @@ function App() {
         <Route
           path="/caterer/view-profile"
           element={
-            <ProtectedRoute>
+            <ProtectedRoute allowedRoles={["caterer", "admin"]}>
               <CatererProfile />
             </ProtectedRoute>
           }
