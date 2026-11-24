@@ -10,6 +10,8 @@ import BookingForm from "./pages/customer/BookingForm";
 
 import Dashboard from "./pages/caterer/Dashboard";
 import CatererForm from "./pages/caterer/CatererForm";
+import CreatePackage from "./pages/caterer/CreatePackage";
+import CatererProfile from "./pages/caterer/CatererProfile";
 
 import Login from "./pages/auth/Login";
 import Signup from "./pages/auth/Signup";
@@ -78,6 +80,24 @@ function App() {
           element={
             <ProtectedRoute>
               <CatererForm />
+            </ProtectedRoute>
+          }
+        />
+
+                <Route
+          path="/caterer/create-package"
+          element={
+            <ProtectedRoute>
+              <CreatePackage />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/caterer/view-profile"
+          element={
+            <ProtectedRoute>
+              <CatererProfile />
             </ProtectedRoute>
           }
         />

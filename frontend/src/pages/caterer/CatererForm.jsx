@@ -23,10 +23,19 @@ function CatererForm() {
     });
   }
 
-  function handleSubmit(event) {
+    async function handleSubmit(event) {
     event.preventDefault();
-    console.log("Caterer Details:", formData);
-    alert("Caterer details saved successfully!");
+    try {
+      const res = await fetch("/api/caterers/me", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(formData),
+      });
+      if (!res.ok) throw new Error("Failed to save");
+      alert("Caterer details saved successfully!");
+    } catch (err) {
+      alert("Could not save - is backend running?");
+    }
   }
 
   return (
@@ -64,6 +73,8 @@ function CatererForm() {
             { value: "corporate", label: "Corporate Events" },
             { value: "birthday", label: "Birthday Parties" },
             { value: "private", label: "Private Events" },
+            { value: "funeral", label: "Funeral / Memorial" },
+            { value: "graduation", label: "Graduation" },
           ]}
         />
 
