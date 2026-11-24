@@ -1,47 +1,92 @@
+
 import { useState } from "react";
+import { useAuth } from "../../context/AuthContext";
+import { createCaterer } from "../../api";
 import Input from "../../components/Input";
-import Select from "../../components/Select";
 import Button from "../../components/Button";
 
 function CatererForm() {
+  const { user } = useAuth();
+
   const [formData, setFormData] = useState({
     businessName: "",
     description: "",
-    category: "",
     location: "",
     phone: "",
-    email: "",
-    menu: "",
   });
+
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
 
   function handleChange(event) {
     const { name, value } = event.target;
 
-    setFormData({
-      ...formData,
+    setFormData((previousData) => ({
+      ...previousData,
       [name]: value,
-    });
+    }));
   }
 
-    async function handleSubmit(event) {
+  async function handleSubmit(event) {
     event.preventDefault();
+
+    setError("");
+    setSuccess("");
+
+    if (!user || user.role !== "caterer") {
+      setError("Please log in using a caterer account.");
+      return;
+    }
+
+    if (!user.id) {
+      setError("Your account ID could not be found. Please log in again.");
+      return;
+    }
+
+    setLoading(true);
+
     try {
-      const res = await fetch("/api/caterers/me", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
-      });
-      if (!res.ok) throw new Error("Failed to save");
-      alert("Caterer details saved successfully!");
+      const payload = {
+        user_id: user.id,
+        business_name: formData.businessName.trim(),
+        description: formData.description.trim(),
+        location: formData.location.trim(),
+        contact_number: formData.phone.trim(),
+      };
+
+      const response = await createCaterer(payload);
+
+      setSuccess(
+        response.message || "Your caterer profile was created successfully!"
+      );
     } catch (err) {
-      alert("Could not save - is backend running?");
+      setError(
+        typeof err.message === "string"
+          ? err.message
+          : "Unable to create your profile. Please try again."
+      );
+    } finally {
+      setLoading(false);
     }
   }
 
   return (
     <div className="page-container">
       <h1>Caterer Profile</h1>
-      <p>Add or update your catering business details.</p>
+      <p>Add your catering business details.</p>
+
+      {error && (
+        <p className="error-message" role="alert">
+          {error}
+        </p>
+      )}
+
+      {success && (
+        <p className="success-message" role="status">
+          {success}
+        </p>
+      )}
 
       <form onSubmit={handleSubmit}>
         <Input
@@ -50,6 +95,7 @@ function CatererForm() {
           value={formData.businessName}
           onChange={handleChange}
           placeholder="Enter business name"
+          required
         />
 
         <div className="form-group">
@@ -63,27 +109,13 @@ function CatererForm() {
           />
         </div>
 
-        <Select
-          label="Catering Category"
-          name="category"
-          value={formData.category}
-          onChange={handleChange}
-          options={[
-            { value: "wedding", label: "Wedding" },
-            { value: "corporate", label: "Corporate Events" },
-            { value: "birthday", label: "Birthday Parties" },
-            { value: "private", label: "Private Events" },
-            { value: "funeral", label: "Funeral / Memorial" },
-            { value: "graduation", label: "Graduation" },
-          ]}
-        />
-
         <Input
           label="Business Location"
           name="location"
           value={formData.location}
           onChange={handleChange}
           placeholder="Enter business location"
+          required
         />
 
         <Input
@@ -95,27 +127,9 @@ function CatererForm() {
           placeholder="Enter phone number"
         />
 
-        <Input
-          label="Email Address"
-          name="email"
-          type="email"
-          value={formData.email}
-          onChange={handleChange}
-          placeholder="Enter email address"
-        />
-
-        <div className="form-group">
-          <label htmlFor="menu">Menu Information</label>
-          <textarea
-            id="menu"
-            name="menu"
-            value={formData.menu}
-            onChange={handleChange}
-            placeholder="Describe your menu and packages"
-          />
-        </div>
-
-        <Button type="submit">Save Caterer Details</Button>
+        <Button type="submit" disabled={loading}>
+          {loading ? "Saving Profile..." : "Save Caterer Profile"}
+        </Button>
       </form>
     </div>
   );

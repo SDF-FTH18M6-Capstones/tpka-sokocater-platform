@@ -1047,3 +1047,212 @@
     padding: 25px 20px;
   }
 }
+
+/* CATERER COMPARISON */
+.comparison-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 15px;
+  margin: 25px 0;
+  padding: 18px 22px;
+  background: #edf4ee;
+  border-radius: 12px;
+}
+
+.comparison-toolbar p {
+  color: #285b42;
+  font-weight: 600;
+}
+
+.compare-button,
+.clear-comparison-button {
+  border: none;
+  padding: 11px 18px;
+  border-radius: 7px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.compare-button {
+  background: #174c35;
+  color: white;
+}
+
+.compare-button:hover {
+  background: #286b49;
+}
+
+.clear-comparison-button {
+  background: white;
+  color: #174c35;
+  border: 1px solid #174c35;
+}
+
+.compare-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 15px;
+  color: #285b42;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.compare-checkbox input {
+  accent-color: #174c35;
+}
+
+.comparison-error {
+  width: 100%;
+  color: #a83232;
+  font-weight: 600;
+}
+
+.comparison-section {
+  margin-top: 45px;
+}
+
+.comparison-heading {
+  color: #174c35;
+  margin-bottom: 20px;
+}
+
+.comparison-table-wrapper {
+  overflow-x: auto;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.07);
+}
+
+.comparison-table {
+  width: 100%;
+  min-width: 650px;
+  border-collapse: collapse;
+}
+
+.comparison-table th,
+.comparison-table td {
+  padding: 16px;
+  text-align: left;
+  border-bottom: 1px solid #e5ebe6;
+  vertical-align: top;
+}
+
+.comparison-table th {
+  background: #174c35;
+  color: white;
+}
+
+.comparison-table td:first-child {
+  color: #285b42;
+  font-weight: 700;
+  background: #f5f8f5;
+}
+
+.comparison-table ul {
+  padding-left: 18px;
+  margin: 0;
+}
+
+.comparison-table li {
+  margin-bottom: 6px;
+}
+
+@media (max-width: 600px) {
+  .comparison-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .comparison-toolbar button {
+    width: 100%;
+  }
+}
+
+/* =================================
+   SOKOCATER CATEGORY CARD POLISH
+================================= */
+
+.category-grid {
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  align-items: stretch;
+  gap: 28px;
+}
+
+.category-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+  border: 1px solid #e4ebe5;
+  border-radius: 18px;
+  background: #ffffff;
+  box-shadow: 0 8px 24px rgba(23, 76, 53, 0.08);
+  overflow: hidden;
+}
+
+.category-card:hover {
+  transform: translateY(-7px);
+  box-shadow: 0 16px 34px rgba(23, 76, 53, 0.15);
+  border-color: #c6d9ca;
+}
+
+.category-image {
+  height: 235px;
+  width: 100%;
+  object-fit: cover;
+  transition: transform 0.35s ease;
+}
+
+.category-card:hover .category-image {
+  transform: scale(1.04);
+}
+
+.category-card-content {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  padding: 25px;
+}
+
+.category-card h3 {
+  color: #174c35;
+  font-size: 22px;
+  margin: 0 0 12px;
+}
+
+.category-card p {
+  color: #68756d;
+  line-height: 1.7;
+  font-size: 14px;
+  margin-bottom: 20px;
+}
+
+.category-card a {
+  display: inline-block;
+  align-self: flex-start;
+  margin-top: auto;
+  padding: 11px 18px;
+  border-radius: 7px;
+  background: #174c35;
+  color: #ffffff;
+  transition: background 0.2s ease;
+}
+
+.category-card a:hover {
+  background: #286b49;
+  color: #ffffff;
+}
+
+@media (max-width: 600px) {
+  .category-grid {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+
+  .category-image {
+    height: 210px;
+  }
+}
