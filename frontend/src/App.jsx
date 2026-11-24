@@ -29,14 +29,7 @@ function App() {
         <Route path="/signup" element={<Signup />} />
 
         {/* Customer routes */}
-        <Route
-          path="/"
-          element={
-            <ProtectedRoute>
-              <Home />
-            </ProtectedRoute>
-          }
-        />
+        <Route path="/" element={<Home />} />
 
         <Route
           path="/caterers"
@@ -103,7 +96,7 @@ function App() {
         />
 
         {/* Unknown routes */}
-        <Route path="*" element={<Navigate to="/login" replace />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
   );
