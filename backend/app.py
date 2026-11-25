@@ -29,20 +29,10 @@ def create_app(test_config=None):
         app,
         resources={
             r"/api/*": {
-                "origins": [
-                    "http://localhost:5173",
-                    "http://127.0.0.1:5173",
-                    "http://localhost:5174",
-                    "http://127.0.0.1:5174",
-                    "http://localhost:5175",
-                    "http://127.0.0.1:5175",
-                    "http://localhost:5176",
-                    "http://127.0.0.1:5176",
-                    "http://localhost:5177",
-                    "http://127.0.0.1:5177",
-                    "http://localhost:5178",
-                    "http://127.0.0.1:5178",
-                ]
+                "origins": os.environ.get(
+                    "CORS_ORIGINS",
+                    "http://localhost:5173,http://127.0.0.1:5173,http://localhost:5174,http://127.0.0.1:5174,http://localhost:5175,http://127.0.0.1:5175,http://localhost:5176,http://127.0.0.1:5176,http://localhost:5177,http://127.0.0.1:5177,http://localhost:5178,http://127.0.0.1:5178",
+                ).split(",")
             }
         },
         supports_credentials=True,
@@ -50,7 +40,12 @@ def create_app(test_config=None):
 
     os.makedirs(app.instance_path, exist_ok=True)
 
-    app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///sokocater.db"
+    database_url = os.environ.get("DATABASE_URL", "").strip()
+    if database_url.startswith("postgres://"):
+        database_url = database_url.replace("postgres://", "postgresql://", 1)
+    if not database_url:
+        database_url = "sqlite:///sokocater.db"
+    app.config["SQLALCHEMY_DATABASE_URI"] = database_url
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
     # Never use a predictable hardcoded JWT secret.
