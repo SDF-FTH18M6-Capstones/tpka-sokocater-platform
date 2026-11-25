@@ -19,6 +19,7 @@ function Navbar() {
       <div className="nav-links">
         <NavLink to="/">Home</NavLink>
         <NavLink to="/caterers">Find Catering</NavLink>
+        {user?.role === "customer" && <NavLink to="/my-bookings">My Bookings</NavLink>}
         <a href="/#categories">Categories</a>
         <a href="/#about">About</a>
       </div>

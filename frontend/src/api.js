@@ -73,10 +73,72 @@ export async function createCaterer(payload) {
   return handleRes(res);
 }
 
+export async function updateCaterer(id, payload) {
+  const res = await fetch(`${API_URL}/caterers/${id}`, {
+    method: "PUT",
+    headers: authHeaders(),
+    body: JSON.stringify(payload),
+  });
+
+  return handleRes(res);
+}
+
+export async function deleteCaterer(id) {
+  const res = await fetch(`${API_URL}/caterers/${id}`, {
+    method: "DELETE",
+    headers: authHeaders(),
+  });
+
+  return handleRes(res);
+}
+
 export async function getPackages() {
   const res = await fetch(`${API_URL}/packages`, {
     headers: authHeaders(),
   });
 
+  return handleRes(res);
+}
+
+export async function updateBooking(id, status) {
+  const res = await fetch(`${API_URL}/bookings/${id}`, {
+    method: "PUT",
+    headers: authHeaders(),
+    body: JSON.stringify({ status }),
+  });
+  return handleRes(res);
+}
+
+export async function deleteBooking(id) {
+  const res = await fetch(`${API_URL}/bookings/${id}`, {
+    method: "DELETE",
+    headers: authHeaders(),
+  });
+  return handleRes(res);
+}
+
+export async function createPackage(payload) {
+  const res = await fetch(`${API_URL}/packages`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify(payload),
+  });
+  return handleRes(res);
+}
+
+export async function updatePackage(id, payload) {
+  const res = await fetch(`${API_URL}/packages/${id}`, {
+    method: "PUT",
+    headers: authHeaders(),
+    body: JSON.stringify(payload),
+  });
+  return handleRes(res);
+}
+
+export async function deletePackage(id) {
+  const res = await fetch(`${API_URL}/packages/${id}`, {
+    method: "DELETE",
+    headers: authHeaders(),
+  });
   return handleRes(res);
 }

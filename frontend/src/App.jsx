@@ -7,6 +7,7 @@ import Home from "./pages/customer/Home";
 import BrowseCaterers from "./pages/customer/BrowseCaterers";
 import CatererDetail from "./pages/customer/CatererDetail";
 import BookingForm from "./pages/customer/BookingForm";
+import MyBookings from "./pages/customer/MyBookings";
 
 import Dashboard from "./pages/caterer/Dashboard";
 import CatererForm from "./pages/caterer/CatererForm";
@@ -58,6 +59,15 @@ function App() {
           }
         />
 
+        <Route
+          path="/my-bookings"
+          element={
+            <ProtectedRoute allowedRoles={["customer"]}>
+              <MyBookings />
+            </ProtectedRoute>
+          }
+        />
+
         {/* Caterer routes - CATERER ONLY */}
         <Route
           path="/caterer/dashboard"
@@ -86,14 +96,8 @@ function App() {
           }
         />
 
-        <Route
-          path="/caterer/view-profile"
-          element={
-            <ProtectedRoute allowedRoles={["caterer", "admin"]}>
-              <CatererProfile />
-            </ProtectedRoute>
-          }
-        />
+        <Route path="/caterer/view-profile/:id" element={<CatererProfile />} />
+        <Route path="/caterer/view-profile" element={<CatererProfile />} />
 
         {/* Unknown routes */}
         <Route path="*" element={<Navigate to="/" replace />} />
