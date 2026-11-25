@@ -1,12 +1,16 @@
 
 from flask import Blueprint, jsonify, request
-from flask_jwt_extended import jwt_required, get_jwt_identity, get_jwt
+from flask_jwt_extended import jwt_required
 from sqlalchemy.exc import IntegrityError
 from marshmallow import ValidationError
 
 from extensions import db
-from models import User, Caterer
-from schemas.caterer_schema import CatererSchema
+from models import Caterer, Package
+from auth_utils import get_authenticated_user
+from schemas.caterer_schema import (
+    CatererSchema,
+    ALLOWED_CATEGORIES
+)
 
 
 caterer_bp = Blueprint("caterers", __name__)
@@ -15,28 +19,253 @@ caterer_schema = CatererSchema()
 caterers_schema = CatererSchema(many=True)
 
 
-# ============================================================
-# GET ALL CATERERS
-# PUBLIC
-# ============================================================
+# --------------------------------------------------
+# SERIALIZATION HELPERS
+# --------------------------------------------------
+
+def serialize_package(package):
+    """Return package information together with selected menu items."""
+
+    menu_items = [
+        {
+            "id": package_item.menu_item.id,
+            "menu_id": package_item.menu_item.menu_id,
+            "item_name": package_item.menu_item.item_name,
+            "description": package_item.menu_item.description,
+            "price": str(package_item.menu_item.price),
+            "image_url": package_item.menu_item.image_url
+        }
+        for package_item in package.package_items
+        if package_item.menu_item is not None
+    ]
+
+    return {
+        "id": package.id,
+        "caterer_id": package.caterer_id,
+        "package_name": package.package_name,
+        "description": package.description,
+        "price_per_guest": str(package.price_per_guest),
+        "minimum_guests": package.minimum_guests,
+        "maximum_guests": package.maximum_guests,
+        "menu_items": menu_items,
+        "menus": menu_items
+    }
+
+
+def serialize_caterer(caterer, include_packages=False):
+    """Serialize a caterer with category, packages and price range."""
+
+    caterer_data = caterer_schema.dump(caterer)
+
+    packages = caterer.packages
+
+    if packages:
+        prices = [
+            package.price_per_guest
+            for package in packages
+        ]
+
+        caterer_data["price_range"] = {
+            "min_price": str(min(prices)),
+            "max_price": str(max(prices))
+        }
+    else:
+        caterer_data["price_range"] = {
+            "min_price": None,
+            "max_price": None
+        }
+
+    if include_packages:
+        caterer_data["packages"] = [
+            serialize_package(package)
+            for package in packages
+        ]
+
+    return caterer_data
+
+
+# --------------------------------------------------
+# GET ALL CATERERS - PUBLIC
+# --------------------------------------------------
 
 @caterer_bp.route("/api/caterers", methods=["GET"])
 def get_caterers():
 
-    caterers = Caterer.query.all()
+    query = Caterer.query
+
+    # PRICE FILTERING
+
+    min_price = request.args.get("min_price")
+    max_price = request.args.get("max_price")
+
+    try:
+        min_price = (
+            float(min_price)
+            if min_price is not None
+            else None
+        )
+
+        max_price = (
+            float(max_price)
+            if max_price is not None
+            else None
+        )
+
+    except ValueError:
+        return jsonify({
+            "error": "min_price and max_price must be numbers"
+        }), 400
+
+    if min_price is not None and min_price < 0:
+        return jsonify({
+            "error": "min_price cannot be negative"
+        }), 400
+
+    if max_price is not None and max_price < 0:
+        return jsonify({
+            "error": "max_price cannot be negative"
+        }), 400
+
+    if (
+        min_price is not None
+        and max_price is not None
+        and min_price > max_price
+    ):
+        return jsonify({
+            "error": "min_price cannot be greater than max_price"
+        }), 400
+
+    if min_price is not None or max_price is not None:
+
+        query = query.join(
+            Package,
+            Package.caterer_id == Caterer.id
+        )
+
+        if min_price is not None:
+            query = query.filter(
+                Package.price_per_guest >= min_price
+            )
+
+        if max_price is not None:
+            query = query.filter(
+                Package.price_per_guest <= max_price
+            )
+
+        query = query.distinct()
+
+    # CATEGORY FILTERING
+
+    category = request.args.get("category")
+
+    if category is not None:
+
+        category = category.strip()
+
+        if not category:
+            return jsonify({
+                "error": "Category cannot be empty"
+            }), 400
+
+        normalized_category = next(
+            (
+                allowed
+                for allowed in ALLOWED_CATEGORIES
+                if allowed.lower() == category.lower()
+            ),
+            None
+        )
+
+        if normalized_category is None:
+            return jsonify({
+                "error": (
+                    "Invalid category. "
+                    "Choose Food, Wedding, or Corporate."
+                )
+            }), 400
+
+        query = query.filter(
+            db.func.lower(Caterer.category)
+            == normalized_category.lower()
+        )
+
+    caterers = query.all()
 
     return jsonify({
         "message": "Caterers retrieved successfully",
-        "data": caterers_schema.dump(caterers)
+        "data": [
+            serialize_caterer(caterer)
+            for caterer in caterers
+        ]
     }), 200
 
+# --------------------------------------------------
+# COMPARE CATERERS - PUBLIC
+# GET /api/caterers/compare?ids=1,2,3
+# --------------------------------------------------
 
-# ============================================================
-# GET ONE CATERER
-# PUBLIC
-# ============================================================
+@caterer_bp.route("/api/caterers/compare", methods=["GET"])
+def compare_caterers():
+    ids_param = request.args.get("ids")
 
-@caterer_bp.route("/api/caterers/<int:caterer_id>", methods=["GET"])
+    if not ids_param:
+        return jsonify({
+            "error": "ids query param is required. Example: ?ids=1,2,3"
+        }), 400
+
+    try:
+        ids = [
+            int(part.strip())
+            for part in ids_param.split(",")
+            if part.strip()
+        ]
+    except ValueError:
+        return jsonify({
+            "error": "ids must be numbers separated by commas. Example: ?ids=1,2,3"
+        }), 400
+
+    # Remove duplicates, keep order
+    ids = list(dict.fromkeys(ids))
+
+    if len(ids) < 2 or len(ids) > 3:
+        return jsonify({
+            "error": "Compare requires 2 to 3 caterers."
+        }), 400
+
+    caterers = Caterer.query.filter(Caterer.id.in_(ids)).all()
+
+    if len(caterers) != len(ids):
+        return jsonify({
+            "error": "One or more caterers not found."
+        }), 404
+
+    # Keep them in the order the user asked for
+    caterers_by_id = {c.id: c for c in caterers}
+    caterers = [caterers_by_id[i] for i in ids]
+
+    categories = {c.category for c in caterers if c.category}
+
+    if len(categories) > 1:
+        return jsonify({
+            "error": "Caterers to compare must be in the same category."
+        }), 400
+
+    return jsonify({
+        "message": "Caterers retrieved successfully",
+        "data": [
+            serialize_caterer(c, include_packages=True)
+            for c in caterers
+        ]
+    }), 200
+
+# --------------------------------------------------
+# GET ONE CATERER - PUBLIC
+# --------------------------------------------------
+
+@caterer_bp.route(
+    "/api/caterers/<int:caterer_id>",
+    methods=["GET"]
+)
 def get_caterer(caterer_id):
 
     caterer = db.session.get(Caterer, caterer_id)
@@ -47,23 +276,29 @@ def get_caterer(caterer_id):
         }), 404
 
     return jsonify({
-        "data": caterer_schema.dump(caterer)
+        "data": serialize_caterer(
+            caterer,
+            include_packages=True
+        )
     }), 200
 
 
-# ============================================================
+# --------------------------------------------------
 # CREATE CATERER PROFILE
-# CATERER ONLY
-# ============================================================
+# --------------------------------------------------
 
 @caterer_bp.route("/api/caterers", methods=["POST"])
 @jwt_required()
 def create_caterer():
 
-    current_user_id = int(get_jwt_identity())
-    current_role = get_jwt().get("role")
+    user = get_authenticated_user()
 
-    if current_role != "caterer":
+    if user is None:
+        return jsonify({
+            "error": "Invalid or outdated user identity"
+        }), 401
+
+    if user.role != "caterer":
         return jsonify({
             "error": "Only caterers can create caterer profiles"
         }), 403
@@ -75,28 +310,21 @@ def create_caterer():
             "error": "Invalid JSON body"
         }), 400
 
+    if "verification_status" in data:
+        return jsonify({
+            "error": "You cannot set your own verification status"
+        }), 400
+
     try:
         validated_data = caterer_schema.load(data)
 
-        if validated_data["user_id"] != current_user_id:
+        if validated_data["user_id"] != user.id:
             return jsonify({
                 "error": "You can only create a profile for yourself"
             }), 403
 
-        user = db.session.get(User, current_user_id)
-
-        if not user:
-            return jsonify({
-                "error": "User not found"
-            }), 404
-
-        if user.role != "caterer":
-            return jsonify({
-                "error": "User must have a caterer role"
-            }), 403
-
         existing_caterer = Caterer.query.filter_by(
-            user_id=current_user_id
+            user_id=user.id
         ).first()
 
         if existing_caterer:
@@ -104,8 +332,6 @@ def create_caterer():
                 "error": "You already have a caterer profile"
             }), 409
 
-        # New profiles must start with pending verification.
-        # The client cannot choose its own verification status.
         caterer = Caterer(
             **validated_data,
             verification_status="pending"
@@ -116,10 +342,12 @@ def create_caterer():
 
         return jsonify({
             "message": "Caterer created successfully",
-            "data": caterer_schema.dump(caterer)
+            "data": serialize_caterer(caterer)
         }), 201
 
     except ValidationError as error:
+        db.session.rollback()
+
         return jsonify({
             "error": error.messages
         }), 400
@@ -132,19 +360,25 @@ def create_caterer():
         }), 409
 
 
-# ============================================================
-# UPDATE CATERER PROFILE
-# CATERER ONLY - OWN PROFILE
-# ============================================================
+# --------------------------------------------------
+# UPDATE CATERER PROFILE - OWNER ONLY
+# --------------------------------------------------
 
-@caterer_bp.route("/api/caterers/<int:caterer_id>", methods=["PUT"])
+@caterer_bp.route(
+    "/api/caterers/<int:caterer_id>",
+    methods=["PUT"]
+)
 @jwt_required()
 def update_caterer(caterer_id):
 
-    current_user_id = int(get_jwt_identity())
-    current_role = get_jwt().get("role")
+    user = get_authenticated_user()
 
-    if current_role != "caterer":
+    if user is None:
+        return jsonify({
+            "error": "Invalid or outdated user identity"
+        }), 401
+
+    if user.role != "caterer":
         return jsonify({
             "error": "Only caterers can update caterer profiles"
         }), 403
@@ -156,7 +390,7 @@ def update_caterer(caterer_id):
             "error": "Caterer not found"
         }), 404
 
-    if caterer.user_id != current_user_id:
+    if caterer.user_id != user.id:
         return jsonify({
             "error": "You are not authorized to update this profile"
         }), 403
@@ -168,12 +402,22 @@ def update_caterer(caterer_id):
             "error": "Invalid JSON body"
         }), 400
 
-    try:
-        if "user_id" in data:
-            return jsonify({
-                "error": "You cannot change profile ownership"
-            }), 403
+    if not data:
+        return jsonify({
+            "error": "No update data provided"
+        }), 400
 
+    if "user_id" in data:
+        return jsonify({
+            "error": "You cannot change profile ownership"
+        }), 403
+
+    if "verification_status" in data:
+        return jsonify({
+            "error": "You cannot change verification status"
+        }), 400
+
+    try:
         validated_data = caterer_schema.load(
             data,
             partial=True
@@ -186,10 +430,12 @@ def update_caterer(caterer_id):
 
         return jsonify({
             "message": "Caterer updated successfully",
-            "data": caterer_schema.dump(caterer)
+            "data": serialize_caterer(caterer)
         }), 200
 
     except ValidationError as error:
+        db.session.rollback()
+
         return jsonify({
             "error": error.messages
         }), 400
@@ -202,19 +448,25 @@ def update_caterer(caterer_id):
         }), 409
 
 
-# ============================================================
-# DELETE CATERER PROFILE
-# CATERER ONLY - OWN PROFILE
-# ============================================================
+# --------------------------------------------------
+# DELETE CATERER PROFILE - OWNER ONLY
+# --------------------------------------------------
 
-@caterer_bp.route("/api/caterers/<int:caterer_id>", methods=["DELETE"])
+@caterer_bp.route(
+    "/api/caterers/<int:caterer_id>",
+    methods=["DELETE"]
+)
 @jwt_required()
 def delete_caterer(caterer_id):
 
-    current_user_id = int(get_jwt_identity())
-    current_role = get_jwt().get("role")
+    user = get_authenticated_user()
 
-    if current_role != "caterer":
+    if user is None:
+        return jsonify({
+            "error": "Invalid or outdated user identity"
+        }), 401
+
+    if user.role != "caterer":
         return jsonify({
             "error": "Only caterers can delete caterer profiles"
         }), 403
@@ -226,7 +478,7 @@ def delete_caterer(caterer_id):
             "error": "Caterer not found"
         }), 404
 
-    if caterer.user_id != current_user_id:
+    if caterer.user_id != user.id:
         return jsonify({
             "error": "You are not authorized to delete this profile"
         }), 403

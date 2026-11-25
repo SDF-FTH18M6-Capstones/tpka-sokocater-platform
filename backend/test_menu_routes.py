@@ -1,12 +1,14 @@
 
 import unittest
+from datetime import timedelta
+from decimal import Decimal
 
 from flask_jwt_extended import create_access_token
 from werkzeug.security import generate_password_hash
 
 from app import create_app
 from extensions import db
-from models import User, Caterer, Menu
+from models import User, Caterer, Menu, MenuItem
 
 
 class TestMenuRoutes(unittest.TestCase):
@@ -27,7 +29,6 @@ class TestMenuRoutes(unittest.TestCase):
 
         self.client = self.app.test_client()
 
-        # Create test users.
         self.caterer_user = self.create_user(
             email="caterer@example.com",
             role="caterer"
@@ -48,7 +49,6 @@ class TestMenuRoutes(unittest.TestCase):
             role="caterer"
         )
 
-        # Create caterer profiles.
         self.caterer = self.create_caterer_profile(
             self.caterer_user
         )
@@ -204,6 +204,32 @@ class TestMenuRoutes(unittest.TestCase):
 
         self.assertEqual(response.status_code, 404)
 
+    def test_pending_caterers_menus_are_publicly_visible(self):
+
+        menu = self.create_menu()
+
+        self.assertEqual(
+            self.caterer.verification_status,
+            "pending"
+        )
+
+        all_response = self.client.get("/api/menus")
+
+        self.assertEqual(all_response.status_code, 200)
+
+        menu_ids = [
+            item["id"]
+            for item in all_response.get_json()["data"]
+        ]
+
+        self.assertIn(menu.id, menu_ids)
+
+        single_response = self.client.get(
+            f"/api/menus/{menu.id}"
+        )
+
+        self.assertEqual(single_response.status_code, 200)
+
     # ==================================================
     # CREATE MENU ROUTE
     # ==================================================
@@ -280,6 +306,19 @@ class TestMenuRoutes(unittest.TestCase):
 
         data = self.valid_menu_data()
         data["menu_name"] = "A"
+
+        response = self.client.post(
+            "/api/menus",
+            json=data,
+            headers=self.create_token(self.caterer_user)
+        )
+
+        self.assertEqual(response.status_code, 400)
+
+    def test_create_menu_with_whitespace_only_name(self):
+
+        data = self.valid_menu_data()
+        data["menu_name"] = "     "
 
         response = self.client.post(
             "/api/menus",
@@ -402,6 +441,81 @@ class TestMenuRoutes(unittest.TestCase):
 
         self.assertEqual(response.status_code, 400)
 
+    def test_update_menu_with_whitespace_only_name(self):
+
+        menu = self.create_menu()
+
+        response = self.client.put(
+            f"/api/menus/{menu.id}",
+            json={
+                "menu_name": "     "
+            },
+            headers=self.create_token(self.caterer_user)
+        )
+
+        self.assertEqual(response.status_code, 400)
+
+    def test_update_menu_with_empty_json(self):
+
+        menu = self.create_menu()
+
+        response = self.client.put(
+            f"/api/menus/{menu.id}",
+            json={},
+            headers=self.create_token(self.caterer_user)
+        )
+
+        self.assertEqual(response.status_code, 400)
+
+    def test_update_menu_with_invalid_json(self):
+
+        menu = self.create_menu()
+
+        response = self.client.put(
+            f"/api/menus/{menu.id}",
+            data="This is not valid JSON",
+            content_type="application/json",
+            headers=self.create_token(self.caterer_user)
+        )
+
+        self.assertEqual(response.status_code, 400)
+
+    # ==================================================
+    # INVALID JWT TESTS
+    # ==================================================
+
+    def test_invalid_token_is_rejected(self):
+
+        response = self.client.post(
+            "/api/menus",
+            json=self.valid_menu_data(),
+            headers={
+                "Authorization": "Bearer invalid.jwt.token"
+            }
+        )
+
+        self.assertEqual(response.status_code, 422)
+
+    def test_expired_token_is_rejected(self):
+
+        expired_token = create_access_token(
+            identity=str(self.caterer_user.id),
+            additional_claims={
+                "role": "caterer"
+            },
+            expires_delta=timedelta(seconds=-1)
+        )
+
+        response = self.client.post(
+            "/api/menus",
+            json=self.valid_menu_data(),
+            headers={
+                "Authorization": f"Bearer {expired_token}"
+            }
+        )
+
+        self.assertEqual(response.status_code, 401)
+
     # ==================================================
     # DELETE MENU ROUTE
     # ==================================================
@@ -463,6 +577,39 @@ class TestMenuRoutes(unittest.TestCase):
         )
 
         self.assertEqual(response.status_code, 404)
+
+    def test_cannot_delete_menu_with_related_menu_items(self):
+
+        menu = self.create_menu()
+
+        menu_item = MenuItem(
+            menu_id=menu.id,
+            item_name="Chicken Pilau",
+            description="Seasoned rice with chicken",
+            price=Decimal("850.00"),
+            image_url="https://example.com/pilau.jpg"
+        )
+
+        db.session.add(menu_item)
+        db.session.commit()
+
+        menu_id = menu.id
+        menu_item_id = menu_item.id
+
+        response = self.client.delete(
+            f"/api/menus/{menu_id}",
+            headers=self.create_token(self.caterer_user)
+        )
+
+        self.assertEqual(response.status_code, 409)
+
+        self.assertIsNotNone(
+            db.session.get(Menu, menu_id)
+        )
+
+        self.assertIsNotNone(
+            db.session.get(MenuItem, menu_item_id)
+        )
 
 
 if __name__ == "__main__":

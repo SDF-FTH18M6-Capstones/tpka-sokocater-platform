@@ -18,6 +18,7 @@ typing-extensions = "==4.16.0"
 werkzeug = "==3.1.9"
 marshmallow = "*"
 flask-jwt-extended = "*"
+flask-cors = "*"
 
 [dev-packages]
 pytest = "*"

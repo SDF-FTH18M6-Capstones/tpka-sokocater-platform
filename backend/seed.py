@@ -1,5 +1,5 @@
 
-from datetime import UTC, date, datetime, timedelta
+from datetime import date, timedelta
 from decimal import Decimal
 
 from werkzeug.security import generate_password_hash
@@ -7,7 +7,19 @@ from werkzeug.security import generate_password_hash
 from app import create_app
 from extensions import db
 
-from models import User, Caterer, Menu, Package, Booking, Order
+from models import (
+    User,
+    Caterer,
+    Cuisine,
+    CatererCuisine,
+    Menu,
+    MenuItem,
+    Package,
+    PackageItem,
+    AddOn,
+    Booking,
+    BookingItem,
+)
 
 
 # ============================================================
@@ -16,8 +28,9 @@ from models import User, Caterer, Menu, Package, Booking, Order
 
 def get_or_create(model, lookup, defaults=None):
     """
-    Find an existing record or create a new one.
-    Prevents duplicate sample records when the script is rerun.
+    Return an existing record or create a new one.
+
+    Existing records are not overwritten automatically.
     """
 
     record = db.session.query(model).filter_by(**lookup).first()
@@ -39,24 +52,24 @@ def get_or_create(model, lookup, defaults=None):
 
 
 # ============================================================
-# SEED USERS
+# 1. SEED USERS
 # ============================================================
 
 def seed_users():
 
     print("Seeding users...")
 
-    sample_password = generate_password_hash("SokoCater123!")
+    password_hash = generate_password_hash("SokoCater123!")
 
     admin = get_or_create(
         User,
         {"email": "admin@sokocater.com"},
         {
             "full_name": "SokoCater Admin",
-            "password_hash": sample_password,
+            "password_hash": password_hash,
             "role": "admin",
-            "phone": "0711000001"
-        }
+            "phone_number": "0711000001",
+        },
     )
 
     customer_one = get_or_create(
@@ -64,10 +77,10 @@ def seed_users():
         {"email": "customer1@example.com"},
         {
             "full_name": "Jane Wanjiku",
-            "password_hash": sample_password,
+            "password_hash": password_hash,
             "role": "customer",
-            "phone": "0711000002"
-        }
+            "phone_number": "0711000002",
+        },
     )
 
     customer_two = get_or_create(
@@ -75,10 +88,10 @@ def seed_users():
         {"email": "customer2@example.com"},
         {
             "full_name": "Brian Otieno",
-            "password_hash": sample_password,
+            "password_hash": password_hash,
             "role": "customer",
-            "phone": "0711000003"
-        }
+            "phone_number": "0711000003",
+        },
     )
 
     caterer_user_one = get_or_create(
@@ -86,10 +99,10 @@ def seed_users():
         {"email": "greenplate@example.com"},
         {
             "full_name": "Mary Njeri",
-            "password_hash": sample_password,
+            "password_hash": password_hash,
             "role": "caterer",
-            "phone": "0711000004"
-        }
+            "phone_number": "0711000004",
+        },
     )
 
     caterer_user_two = get_or_create(
@@ -97,10 +110,10 @@ def seed_users():
         {"email": "tastehub@example.com"},
         {
             "full_name": "David Mwangi",
-            "password_hash": sample_password,
+            "password_hash": password_hash,
             "role": "caterer",
-            "phone": "0711000005"
-        }
+            "phone_number": "0711000005",
+        },
     )
 
     return {
@@ -108,12 +121,12 @@ def seed_users():
         "customer_one": customer_one,
         "customer_two": customer_two,
         "caterer_user_one": caterer_user_one,
-        "caterer_user_two": caterer_user_two
+        "caterer_user_two": caterer_user_two,
     }
 
 
 # ============================================================
-# SEED CATERERS
+# 2. SEED CATERERS
 # ============================================================
 
 def seed_caterers(users):
@@ -127,8 +140,10 @@ def seed_caterers(users):
             "business_name": "Green Plate Catering",
             "description": "Fresh and delicious catering for weddings and events.",
             "location": "Nairobi",
-            "contact_number": "0711222333"
-        }
+            "contact_number": "0711222333",
+            "verification_status": "pending",
+            "category": "Wedding",
+        },
     )
 
     caterer_two = get_or_create(
@@ -136,20 +151,86 @@ def seed_caterers(users):
         {"user_id": users["caterer_user_two"].id},
         {
             "business_name": "Taste Hub Events",
-            "description": "Professional catering for corporate and private events.",
+            "description": "Professional catering for corporate events.",
             "location": "Kiambu",
-            "contact_number": "0722333444"
-        }
+            "contact_number": "0722333444",
+            "verification_status": "pending",
+            "category": "Corporate",
+        },
     )
+
+    # IMPORTANT:
+    # get_or_create does not update existing records.
+    # Explicitly assign categories so existing caterers
+    # receive the correct categories when the seed runs again.
+
+    caterer_one.category = "Wedding"
+    caterer_two.category = "Corporate"
 
     return {
         "caterer_one": caterer_one,
-        "caterer_two": caterer_two
+        "caterer_two": caterer_two,
     }
 
 
 # ============================================================
-# SEED MENUS
+# 3. SEED CUISINES
+# ============================================================
+
+def seed_cuisines():
+
+    print("Seeding cuisines...")
+
+    kenyan = get_or_create(
+        Cuisine,
+        {"cuisine_name": "Kenyan"},
+    )
+
+    continental = get_or_create(
+        Cuisine,
+        {"cuisine_name": "Continental"},
+    )
+
+    indian = get_or_create(
+        Cuisine,
+        {"cuisine_name": "Indian"},
+    )
+
+    return {
+        "kenyan": kenyan,
+        "continental": continental,
+        "indian": indian,
+    }
+
+
+# ============================================================
+# 4. ASSIGN CUISINES TO CATERERS
+# ============================================================
+
+def seed_caterer_cuisines(caterers, cuisines):
+
+    print("Assigning cuisines to caterers...")
+
+    assignments = [
+        (caterers["caterer_one"], cuisines["kenyan"]),
+        (caterers["caterer_one"], cuisines["continental"]),
+        (caterers["caterer_two"], cuisines["kenyan"]),
+        (caterers["caterer_two"], cuisines["indian"]),
+    ]
+
+    for caterer, cuisine in assignments:
+
+        get_or_create(
+            CatererCuisine,
+            {
+                "caterer_id": caterer.id,
+                "cuisine_id": cuisine.id,
+            },
+        )
+
+
+# ============================================================
+# 5. SEED MENUS
 # ============================================================
 
 def seed_menus(caterers):
@@ -160,34 +241,96 @@ def seed_menus(caterers):
         Menu,
         {
             "caterer_id": caterers["caterer_one"].id,
-            "name": "Wedding Menu"
+            "menu_name": "Wedding Menu",
         },
         {
             "description": "A selection of meals suitable for weddings.",
-            "price": Decimal("1500.00")
-        }
+        },
     )
 
     menu_two = get_or_create(
         Menu,
         {
             "caterer_id": caterers["caterer_two"].id,
-            "name": "Corporate Menu"
+            "menu_name": "Corporate Menu",
         },
         {
             "description": "Professional catering options for corporate events.",
-            "price": Decimal("1200.00")
-        }
+        },
     )
 
     return {
         "menu_one": menu_one,
-        "menu_two": menu_two
+        "menu_two": menu_two,
     }
 
 
 # ============================================================
-# SEED PACKAGES
+# 6. SEED MENU ITEMS
+# ============================================================
+
+def seed_menu_items(menus):
+
+    print("Seeding menu items...")
+
+    chicken_pilau = get_or_create(
+        MenuItem,
+        {
+            "menu_id": menus["menu_one"].id,
+            "item_name": "Chicken Pilau",
+        },
+        {
+            "description": "Kenyan spiced rice served with chicken.",
+            "price": Decimal("500.00"),
+        },
+    )
+
+    chapati = get_or_create(
+        MenuItem,
+        {
+            "menu_id": menus["menu_one"].id,
+            "item_name": "Chapati",
+        },
+        {
+            "description": "Freshly prepared Kenyan chapati.",
+            "price": Decimal("100.00"),
+        },
+    )
+
+    vegetable_rice = get_or_create(
+        MenuItem,
+        {
+            "menu_id": menus["menu_two"].id,
+            "item_name": "Vegetable Rice",
+        },
+        {
+            "description": "Rice prepared with assorted vegetables.",
+            "price": Decimal("350.00"),
+        },
+    )
+
+    grilled_chicken = get_or_create(
+        MenuItem,
+        {
+            "menu_id": menus["menu_two"].id,
+            "item_name": "Grilled Chicken",
+        },
+        {
+            "description": "Seasoned grilled chicken.",
+            "price": Decimal("600.00"),
+        },
+    )
+
+    return {
+        "chicken_pilau": chicken_pilau,
+        "chapati": chapati,
+        "vegetable_rice": vegetable_rice,
+        "grilled_chicken": grilled_chicken,
+    }
+
+
+# ============================================================
+# 7. SEED PACKAGES
 # ============================================================
 
 def seed_packages(caterers):
@@ -198,130 +341,203 @@ def seed_packages(caterers):
         Package,
         {
             "caterer_id": caterers["caterer_one"].id,
-            "name": "Classic Wedding Package"
+            "package_name": "Classic Wedding Package",
         },
         {
-            "category": "Wedding Catering",
-            "description": "A complete wedding catering package."
-        }
+            "description": "A complete wedding catering package.",
+            "price_per_guest": Decimal("1500.00"),
+            "minimum_guests": 20,
+            "maximum_guests": 300,
+        },
     )
 
     package_two = get_or_create(
         Package,
         {
             "caterer_id": caterers["caterer_two"].id,
-            "name": "Corporate Lunch Package"
+            "package_name": "Corporate Lunch Package",
         },
         {
-            "category": "Corporate Events",
-            "description": "A convenient package for corporate events."
-        }
+            "description": "A convenient package for corporate events.",
+            "price_per_guest": Decimal("1200.00"),
+            "minimum_guests": 10,
+            "maximum_guests": 200,
+        },
     )
 
     return {
         "package_one": package_one,
-        "package_two": package_two
+        "package_two": package_two,
     }
 
 
 # ============================================================
-# SEED BOOKINGS
+# 8. CONNECT PACKAGES TO MENU ITEMS
 # ============================================================
 
-def seed_bookings(users, caterers, packages):
+def seed_package_items(packages, menu_items):
+
+    print("Connecting packages to menu items...")
+
+    assignments = [
+        (packages["package_one"], menu_items["chicken_pilau"]),
+        (packages["package_one"], menu_items["chapati"]),
+        (packages["package_two"], menu_items["vegetable_rice"]),
+        (packages["package_two"], menu_items["grilled_chicken"]),
+    ]
+
+    for package, menu_item in assignments:
+
+        get_or_create(
+            PackageItem,
+            {
+                "package_id": package.id,
+                "menu_item_id": menu_item.id,
+            },
+        )
+
+
+# ============================================================
+# 9. SEED ADD-ONS
+# ============================================================
+
+def seed_add_ons(caterers):
+
+    print("Seeding add-ons...")
+
+    # These are existing standalone services.
+    # They are deliberately left without addon_type.
+    # They are not venue, chairs, tables, or materials.
+
+    juice_service = get_or_create(
+        AddOn,
+        {
+            "caterer_id": caterers["caterer_one"].id,
+            "addon_name": "Fresh Juice Service",
+        },
+        {
+            "description": "Freshly prepared juice service.",
+            "price": Decimal("5000.00"),
+        },
+    )
+
+    waiter_service = get_or_create(
+        AddOn,
+        {
+            "caterer_id": caterers["caterer_two"].id,
+            "addon_name": "Waiter Service",
+        },
+        {
+            "description": "Professional waiter service for events.",
+            "price": Decimal("8000.00"),
+        },
+    )
+
+    return {
+        "juice_service": juice_service,
+        "waiter_service": waiter_service,
+    }
+
+
+# ============================================================
+# 10. SEED BOOKINGS
+# ============================================================
+
+def seed_bookings(users, caterers):
 
     print("Seeding bookings...")
 
     booking_one = get_or_create(
         Booking,
         {
-            "user_id": users["customer_one"].id,
+            "customer_id": users["customer_one"].id,
             "caterer_id": caterers["caterer_one"].id,
-            "package_id": packages["package_one"].id,
-            "event_date": date.today() + timedelta(days=30),
-            "event_type": "Wedding"
+            "event_type": "Wedding",
         },
         {
+            "event_date": date.today() + timedelta(days=30),
             "event_location": "Nairobi",
             "guest_count": 80,
-            "price_per_person": Decimal("1500.00"),
             "estimated_total": Decimal("120000.00"),
-            "status": "pending"
-        }
+            "status": "pending",
+        },
     )
 
     booking_two = get_or_create(
         Booking,
         {
-            "user_id": users["customer_two"].id,
+            "customer_id": users["customer_two"].id,
             "caterer_id": caterers["caterer_two"].id,
-            "package_id": packages["package_two"].id,
-            "event_date": date.today() + timedelta(days=60),
-            "event_type": "Corporate Event"
+            "event_type": "Corporate Event",
         },
         {
+            "event_date": date.today() + timedelta(days=60),
             "event_location": "Kiambu",
             "guest_count": 50,
-            "price_per_person": Decimal("1200.00"),
             "estimated_total": Decimal("60000.00"),
-            "status": "confirmed"
-        }
+            "status": "confirmed",
+        },
     )
 
     return {
         "booking_one": booking_one,
-        "booking_two": booking_two
+        "booking_two": booking_two,
     }
 
 
 # ============================================================
-# SEED ORDERS
+# 11. CONNECT BOOKINGS TO PACKAGES AND ADD-ONS
 # ============================================================
 
-def seed_orders(users, caterers, menus):
+def seed_booking_items(bookings, packages, add_ons):
 
-    print("Seeding orders...")
+    print("Connecting bookings to packages and add-ons...")
 
-    order_one = get_or_create(
-        Order,
+    # First booking: wedding package.
+    get_or_create(
+        BookingItem,
         {
-            "user_id": users["customer_one"].id,
-            "caterer_id": caterers["caterer_one"].id,
-            "menu_id": menus["menu_one"].id
+            "booking_id": bookings["booking_one"].id,
+            "package_id": packages["package_one"].id,
         },
         {
-            "quantity": 2,
+            "addon_id": None,
+            "quantity": 80,
             "unit_price": Decimal("1500.00"),
-            "total_amount": Decimal("3000.00"),
-            "status": "pending",
-            "order_date": datetime.now(UTC)
-        }
+        },
     )
 
-    order_two = get_or_create(
-        Order,
+    # Second booking: corporate package.
+    get_or_create(
+        BookingItem,
         {
-            "user_id": users["customer_two"].id,
-            "caterer_id": caterers["caterer_two"].id,
-            "menu_id": menus["menu_two"].id
+            "booking_id": bookings["booking_two"].id,
+            "package_id": packages["package_two"].id,
         },
         {
-            "quantity": 3,
+            "addon_id": None,
+            "quantity": 50,
             "unit_price": Decimal("1200.00"),
-            "total_amount": Decimal("3600.00"),
-            "status": "pending",
-            "order_date": datetime.now(UTC)
-        }
+        },
     )
 
-    return {
-        "order_one": order_one,
-        "order_two": order_two
-    }
+    # Second booking: standalone waiter service add-on.
+    get_or_create(
+        BookingItem,
+        {
+            "booking_id": bookings["booking_two"].id,
+            "addon_id": add_ons["waiter_service"].id,
+        },
+        {
+            "package_id": None,
+            "quantity": 1,
+            "unit_price": Decimal("8000.00"),
+        },
+    )
 
 
 # ============================================================
-# MAIN SEED FUNCTION
+# 12. MAIN SEED FUNCTION
 # ============================================================
 
 def seed_database():
@@ -329,22 +545,29 @@ def seed_database():
     print("\nStarting SokoCater database seeding...\n")
 
     try:
-        # Seed records in foreign-key dependency order.
-        # Database tables must already exist and match the models.
 
         users = seed_users()
 
         caterers = seed_caterers(users)
 
+        cuisines = seed_cuisines()
+
+        seed_caterer_cuisines(caterers, cuisines)
+
         menus = seed_menus(caterers)
+
+        menu_items = seed_menu_items(menus)
 
         packages = seed_packages(caterers)
 
-        bookings = seed_bookings(users, caterers, packages)
+        seed_package_items(packages, menu_items)
 
-        orders = seed_orders(users, caterers, menus)
+        add_ons = seed_add_ons(caterers)
 
-        # Save all changes.
+        bookings = seed_bookings(users, caterers)
+
+        seed_booking_items(bookings, packages, add_ons)
+
         db.session.commit()
 
         print("\n========================================")

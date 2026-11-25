@@ -1,4 +1,18 @@
-from marshmallow import Schema, fields, validate
+
+from marshmallow import (
+    Schema,
+    fields,
+    validate,
+    validates,
+    ValidationError
+)
+
+
+ALLOWED_CATEGORIES = [
+    "Food",
+    "Wedding",
+    "Corporate"
+]
 
 
 class CatererSchema(Schema):
@@ -13,6 +27,14 @@ class CatererSchema(Schema):
     business_name = fields.String(
         required=True,
         validate=validate.Length(min=2, max=150)
+    )
+
+    category = fields.String(
+        required=True,
+        validate=validate.OneOf(
+            ALLOWED_CATEGORIES,
+            error="Category must be Food, Wedding, or Corporate."
+        )
     )
 
     description = fields.String(allow_none=True)
@@ -30,9 +52,24 @@ class CatererSchema(Schema):
 
     business_image = fields.String(
         required=False,
-        allow_none=True
+        allow_none=True,
+        validate=validate.Length(max=255)
     )
 
     verification_status = fields.String(dump_only=True)
 
     created_at = fields.DateTime(dump_only=True)
+
+    @validates("business_name")
+    def validate_business_name(self, value, **kwargs):
+        if not value.strip():
+            raise ValidationError(
+                "Business name cannot contain only spaces."
+            )
+
+    @validates("location")
+    def validate_location(self, value, **kwargs):
+        if not value.strip():
+            raise ValidationError(
+                "Location cannot contain only spaces."
+            )

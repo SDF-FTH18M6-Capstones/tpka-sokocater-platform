@@ -1,11 +1,18 @@
 
 import unittest
-from datetime import date
+from datetime import date, timedelta, time
 from decimal import Decimal
 
 from app import create_app
 from extensions import db
-from models import User, Caterer, Package, Booking, BookingItem
+from models import (
+    User,
+    Caterer,
+    Package,
+    Booking,
+    BookingItem,
+    Availability
+)
 from flask_jwt_extended import create_access_token
 
 
@@ -120,8 +127,7 @@ class TestBookingRoutes(unittest.TestCase):
 
         db.session.commit()
 
-        # Create an existing booking.
-        # SQLAlchemy Date columns require Python date objects.
+        # Create an existing legacy booking without event times.
         self.booking = Booking(
             customer_id=self.customer.id,
             caterer_id=self.caterer.id,
@@ -146,6 +152,13 @@ class TestBookingRoutes(unittest.TestCase):
 
         db.session.add(self.booking_item)
         db.session.commit()
+
+        # Create availability for the default booking date.
+        self.create_availability(
+            date(2027, 8, 20),
+            time(9, 0),
+            time(17, 0)
+        )
 
         # Create authentication tokens.
         self.customer_token = create_access_token(
@@ -195,15 +208,66 @@ class TestBookingRoutes(unittest.TestCase):
         }
 
         # Valid booking request data.
-        # Keep event_date as a string because this is JSON input.
         self.valid_booking_data = {
             "caterer_id": self.caterer.id,
             "package_id": self.package.id,
             "event_date": "2027-08-20",
+            "event_start_time": "10:00:00",
+            "event_end_time": "14:00:00",
             "event_type": "Birthday",
             "event_location": "Nairobi",
             "guest_count": 40
         }
+
+    def create_availability(
+        self,
+        available_date,
+        start_time,
+        end_time,
+        status="available",
+        caterer_id=None
+    ):
+        """Create an availability slot for testing."""
+
+        slot = Availability(
+            caterer_id=caterer_id or self.caterer.id,
+            available_date=available_date,
+            start_time=start_time,
+            end_time=end_time,
+            status=status
+        )
+
+        db.session.add(slot)
+        db.session.commit()
+
+        return slot
+
+    def create_existing_booking(
+        self,
+        event_date,
+        start_time,
+        end_time,
+        status="pending"
+    ):
+        """Create another booking to test schedule conflicts."""
+
+        booking = Booking(
+            customer_id=self.other_customer.id,
+            caterer_id=self.caterer.id,
+            event_date=event_date,
+            event_start_time=start_time,
+            event_end_time=end_time,
+            event_type="Birthday",
+            event_location="Nairobi",
+            guest_count=30,
+            estimated_total=Decimal("45000.00"),
+            status=status
+        )
+
+        db.session.add(booking)
+        db.session.commit()
+
+        return booking
 
     def tearDown(self):
 
@@ -241,6 +305,46 @@ class TestBookingRoutes(unittest.TestCase):
         response = self.client.get("/api/bookings")
 
         self.assertEqual(response.status_code, 401)
+
+    def test_invalid_token_is_rejected(self):
+
+        response = self.client.get(
+            "/api/bookings",
+            headers={
+                "Authorization": "Bearer invalid.jwt.token"
+            }
+        )
+
+        self.assertEqual(response.status_code, 422)
+
+    def test_expired_token_is_rejected(self):
+
+        expired_token = create_access_token(
+            identity=str(self.customer.id),
+            additional_claims={"role": "customer"},
+            expires_delta=timedelta(seconds=-1)
+        )
+
+        response = self.client.get(
+            "/api/bookings",
+            headers={
+                "Authorization": f"Bearer {expired_token}"
+            }
+        )
+
+        self.assertEqual(response.status_code, 401)
+
+    def test_token_with_outdated_role_is_rejected(self):
+
+        self.customer.role = "admin"
+        db.session.commit()
+
+        response = self.client.get(
+            "/api/bookings",
+            headers=self.customer_headers
+        )
+
+        self.assertEqual(response.status_code, 404)
 
     def test_admin_cannot_view_all_bookings(self):
 
@@ -481,6 +585,159 @@ class TestBookingRoutes(unittest.TestCase):
 
         self.assertEqual(response.status_code, 400)
 
+    def test_create_booking_with_past_event_date(self):
+
+        data = self.valid_booking_data.copy()
+        data["event_date"] = (
+            date.today() - timedelta(days=1)
+        ).isoformat()
+
+        response = self.client.post(
+            "/api/bookings",
+            json=data,
+            headers=self.customer_headers
+        )
+
+        self.assertEqual(response.status_code, 400)
+
+    def test_create_booking_for_today(self):
+
+        data = self.valid_booking_data.copy()
+        data["event_date"] = date.today().isoformat()
+
+        self.create_availability(
+            date.today(),
+            time(9, 0),
+            time(17, 0)
+        )
+
+        response = self.client.post(
+            "/api/bookings",
+            json=data,
+            headers=self.customer_headers
+        )
+
+        self.assertEqual(response.status_code, 201)
+
+    def test_create_booking_for_future_date(self):
+
+        data = self.valid_booking_data.copy()
+        data["event_date"] = "2028-06-15"
+
+        self.create_availability(
+            date(2028, 6, 15),
+            time(9, 0),
+            time(17, 0)
+        )
+
+        response = self.client.post(
+            "/api/bookings",
+            json=data,
+            headers=self.customer_headers
+        )
+
+        self.assertEqual(response.status_code, 201)
+
+    # ==================================================
+    # AVAILABILITY VALIDATION
+    # ==================================================
+
+    def test_booking_without_availability_is_rejected(self):
+
+        data = self.valid_booking_data.copy()
+        data["event_date"] = "2027-09-20"
+
+        response = self.client.post(
+            "/api/bookings",
+            json=data,
+            headers=self.customer_headers
+        )
+
+        self.assertEqual(response.status_code, 409)
+
+    def test_booking_with_unavailable_slot_is_rejected(self):
+
+        self.create_availability(
+            date(2027, 9, 20),
+            time(9, 0),
+            time(17, 0),
+            status="unavailable"
+        )
+
+        data = self.valid_booking_data.copy()
+        data["event_date"] = "2027-09-20"
+
+        response = self.client.post(
+            "/api/bookings",
+            json=data,
+            headers=self.customer_headers
+        )
+
+        self.assertEqual(response.status_code, 409)
+
+    def test_booking_outside_available_slot_is_rejected(self):
+
+        data = self.valid_booking_data.copy()
+        data["event_start_time"] = "16:00:00"
+        data["event_end_time"] = "18:00:00"
+
+        response = self.client.post(
+            "/api/bookings",
+            json=data,
+            headers=self.customer_headers
+        )
+
+        self.assertEqual(response.status_code, 409)
+
+    def test_booking_overlapping_existing_booking_is_rejected(self):
+
+        self.create_existing_booking(
+            date(2027, 8, 20),
+            time(12, 0),
+            time(15, 0)
+        )
+
+        response = self.client.post(
+            "/api/bookings",
+            json=self.valid_booking_data,
+            headers=self.customer_headers
+        )
+
+        self.assertEqual(response.status_code, 409)
+
+    def test_cancelled_booking_does_not_block_new_booking(self):
+
+        self.create_existing_booking(
+            date(2027, 8, 20),
+            time(10, 0),
+            time(14, 0),
+            status="cancelled"
+        )
+
+        response = self.client.post(
+            "/api/bookings",
+            json=self.valid_booking_data,
+            headers=self.customer_headers
+        )
+
+        self.assertEqual(response.status_code, 201)
+
+    def test_adjacent_bookings_are_allowed(self):
+
+        self.create_existing_booking(
+            date(2027, 8, 20),
+            time(14, 0),
+            time(16, 0)
+        )
+
+        response = self.client.post(
+            "/api/bookings",
+            json=self.valid_booking_data,
+            headers=self.customer_headers
+        )
+
+        self.assertEqual(response.status_code, 201)
+
     # ==================================================
     # UPDATE BOOKING
     # ==================================================
@@ -618,6 +875,93 @@ class TestBookingRoutes(unittest.TestCase):
         )
 
         self.assertEqual(response.status_code, 403)
+
+    def test_customer_cannot_update_booking_to_past_date(self):
+
+        response = self.client.put(
+            f"/api/bookings/{self.booking.id}",
+            json={"event_date": "2020-01-01"},
+            headers=self.customer_headers
+        )
+
+        self.assertEqual(response.status_code, 400)
+
+    def test_customer_can_update_booking_schedule(self):
+
+        response = self.client.put(
+            f"/api/bookings/{self.booking.id}",
+            json={
+                "event_date": "2027-08-20",
+                "event_start_time": "10:00:00",
+                "event_end_time": "14:00:00"
+            },
+            headers=self.customer_headers
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.json["data"]["event_date"],
+            "2027-08-20"
+        )
+
+    def test_customer_cannot_update_booking_outside_availability(self):
+
+        response = self.client.put(
+            f"/api/bookings/{self.booking.id}",
+            json={
+                "event_date": "2027-08-20",
+                "event_start_time": "16:00:00",
+                "event_end_time": "18:00:00"
+            },
+            headers=self.customer_headers
+        )
+
+        self.assertEqual(response.status_code, 409)
+
+    def test_customer_cannot_update_booking_to_conflicting_time(self):
+
+        self.create_existing_booking(
+            date(2027, 8, 20),
+            time(12, 0),
+            time(15, 0)
+        )
+
+        response = self.client.put(
+            f"/api/bookings/{self.booking.id}",
+            json={
+                "event_date": "2027-08-20",
+                "event_start_time": "10:00:00",
+                "event_end_time": "14:00:00"
+            },
+            headers=self.customer_headers
+        )
+
+        self.assertEqual(response.status_code, 409)
+
+    def test_update_does_not_conflict_with_itself(self):
+
+        self.booking.event_date = date(2027, 8, 20)
+        self.booking.event_start_time = time(10, 0)
+        self.booking.event_end_time = time(14, 0)
+        db.session.commit()
+
+        response = self.client.put(
+            f"/api/bookings/{self.booking.id}",
+            json={"event_start_time": "11:00:00"},
+            headers=self.customer_headers
+        )
+
+        self.assertEqual(response.status_code, 200)
+
+    def test_legacy_booking_can_update_unrelated_details(self):
+
+        response = self.client.put(
+            f"/api/bookings/{self.booking.id}",
+            json={"event_location": "Mombasa"},
+            headers=self.customer_headers
+        )
+
+        self.assertEqual(response.status_code, 200)
 
     # ==================================================
     # DELETE BOOKING

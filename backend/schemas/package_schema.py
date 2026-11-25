@@ -1,4 +1,11 @@
-from marshmallow import Schema, fields, validate
+
+from marshmallow import (
+    Schema,
+    fields,
+    validate,
+    validates_schema,
+    ValidationError
+)
 
 
 class PackageSchema(Schema):
@@ -15,7 +22,9 @@ class PackageSchema(Schema):
         validate=validate.Length(min=2, max=100)
     )
 
-    description = fields.String(allow_none=True)
+    description = fields.String(
+        allow_none=True
+    )
 
     price_per_guest = fields.Decimal(
         required=True,
@@ -33,3 +42,20 @@ class PackageSchema(Schema):
         allow_none=True,
         validate=validate.Range(min=1)
     )
+
+    @validates_schema
+    def validate_guest_range(self, data, **kwargs):
+
+        minimum = data.get("minimum_guests")
+        maximum = data.get("maximum_guests")
+
+        if (
+            minimum is not None
+            and maximum is not None
+            and maximum < minimum
+        ):
+            raise ValidationError({
+                "maximum_guests": [
+                    "Maximum guests must be greater than or equal to minimum guests."
+                ]
+            })

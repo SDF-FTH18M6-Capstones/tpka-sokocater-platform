@@ -2,7 +2,7 @@
 import unittest
 
 from decimal import Decimal
-from datetime import date
+from datetime import date, time
 
 from marshmallow import ValidationError
 
@@ -25,7 +25,8 @@ class TestCatererSchema(unittest.TestCase):
             "business_name": "Kate Catering",
             "description": "Professional catering services",
             "location": "Nairobi",
-            "contact_number": "0712345678"
+            "contact_number": "0712345678",
+            "category": "Food"
         }
 
     def test_valid_caterer_data(self):
@@ -33,6 +34,7 @@ class TestCatererSchema(unittest.TestCase):
 
         self.assertEqual(result["user_id"], 1)
         self.assertEqual(result["business_name"], "Kate Catering")
+        self.assertEqual(result["category"], "Food")
 
     def test_missing_business_name(self):
         data = self.valid_data()
@@ -168,6 +170,8 @@ class TestBookingSchema(unittest.TestCase):
             "caterer_id": 2,
             "package_id": 3,
             "event_date": "2027-05-20",
+            "event_start_time": "10:00:00",
+            "event_end_time": "14:00:00",
             "event_type": "Wedding",
             "event_location": "Nairobi",
             "guest_count": 100
@@ -181,6 +185,16 @@ class TestBookingSchema(unittest.TestCase):
         self.assertEqual(result["event_type"], "Wedding")
         self.assertEqual(result["guest_count"], 100)
         self.assertEqual(result["event_date"], date(2027, 5, 20))
+
+        self.assertEqual(
+            result["event_start_time"],
+            time(10, 0, 0)
+        )
+
+        self.assertEqual(
+            result["event_end_time"],
+            time(14, 0, 0)
+        )
 
     def test_missing_package_id(self):
         data = self.valid_data()
@@ -252,6 +266,8 @@ class TestBookingSchema(unittest.TestCase):
             "caterer_id": 3,
             "package_id": 4,
             "event_date": date(2027, 5, 20),
+            "event_start_time": time(10, 0, 0),
+            "event_end_time": time(14, 0, 0),
             "event_type": "Wedding",
             "event_location": "Nairobi",
             "guest_count": 100,
