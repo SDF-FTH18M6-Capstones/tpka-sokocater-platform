@@ -142,3 +142,28 @@ export async function deletePackage(id) {
   });
   return handleRes(res);
 }
+
+export async function getMenus() {
+  const res = await fetch(`${API_URL}/menus`, { headers: authHeaders() });
+  return handleRes(res);
+}
+export async function createMenu(payload) {
+  const res = await fetch(`${API_URL}/menus`, { method: "POST", headers: authHeaders(), body: JSON.stringify(payload) });
+  return handleRes(res);
+}
+export async function getMenuItems() {
+  const res = await fetch(`${API_URL}/menu-items`, { headers: authHeaders() });
+  return handleRes(res);
+}
+export async function createMenuItem(payload) {
+  const res = await fetch(`${API_URL}/menu-items`, { method: "POST", headers: authHeaders(), body: JSON.stringify(payload) });
+  return handleRes(res);
+}
+export async function deleteMenu(id) {
+  const res = await fetch(`${API_URL}/menus/${id}`, { method: "DELETE", headers: authHeaders() });
+  return handleRes(res);
+}
+export async function deleteMenuItem(id) {
+  const res = await fetch(`${API_URL}/menu-items/${id}`, { method: "DELETE", headers: authHeaders() });
+  return handleRes(res);
+}
