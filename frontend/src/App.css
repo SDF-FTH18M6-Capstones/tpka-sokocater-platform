@@ -426,7 +426,7 @@
   flex-direction: column;
   justify-content: center;
   background:
-    linear-gradient(90deg, rgba(12, 35, 25, 0.82), rgba(12, 35, 25, 0.25)),
+    linear-gradient(90deg, rgba(0,0,0,0.78), rgba(0,0,0,0.55)),
     url("https://images.unsplash.com/photo-1511795409834-ef04bbd61622?auto=format&fit=crop&w=1800&q=85");
   background-size: cover;
   background-position: center;
@@ -434,6 +434,8 @@
 }
 
 .hero h1 {
+  color: #fff !important;
+  text-shadow: 2px 2px 12px rgba(0,0,0,0.9);
   max-width: 650px;
   font-family: "Playfair Display", serif;
   font-size: clamp(42px, 6vw, 68px);
@@ -442,6 +444,8 @@
 }
 
 .hero p {
+  color: #fff !important;
+  text-shadow: 1px 1px 6px rgba(0,0,0,0.9);
   max-width: 560px;
   line-height: 1.8;
 }

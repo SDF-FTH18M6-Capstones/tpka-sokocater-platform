@@ -43,7 +43,7 @@ export default function MyBookings() {
   }
 
   async function handlePay(b) {
-    const method = payMethod[b.id] || "mpesa";
+    const method = payMethod[b.id] || "m-pesa";
     if (!confirm(`Pay KES ${b.estimated_total} via ${method}?`)) return;
     setPayingId(b.id);
     setBusy(true);
@@ -101,10 +101,10 @@ export default function MyBookings() {
 
             {(b.status === "accepted" || b.status === "confirmed") && (
               <>
-                <select value={payMethod[b.id] || "mpesa"} onChange={(e) => setPayMethod({ ...payMethod, [b.id]: e.target.value })} style={{ padding: "8px", borderRadius: 6 }}>
-                  <option value="mpesa">M-Pesa</option>
+                <select value={payMethod[b.id] || "m-pesa"} onChange={(e) => setPayMethod({ ...payMethod, [b.id]: e.target.value })} style={{ padding: "8px", borderRadius: 6 }}>
+                  <option value="m-pesa">M-Pesa</option>
                   <option value="card">Card</option>
-                  <option value="cash">Cash</option>
+                  
                 </select>
                 <button disabled={busy && payingId === b.id} onClick={() => handlePay(b)} style={{ background: "#27ae60", color: "white", border: "none", padding: "8px 12px", borderRadius: 6, cursor: "pointer" }}>
                   {payingId === b.id ? "Paying..." : "Pay Now"}

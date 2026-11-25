@@ -20,12 +20,6 @@ const categories = [
     image:
       "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=800&q=85",
   },
-  {
-    name: "Private Parties",
-    description: "Great food for your celebrations.",
-    image:
-      "https://images.unsplash.com/photo-1515003197210-e0cd7184f8b5?auto=format&fit=crop&w=800&q=85",
-  },
 ];
 
 function Home() {

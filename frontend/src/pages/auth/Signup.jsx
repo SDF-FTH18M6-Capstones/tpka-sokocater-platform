@@ -81,8 +81,8 @@ function Signup() {
           onChange={handleChange}
           required
         >
-          <option value="customer">I want to order food - Customer</option>
-          <option value="caterer">I want to sell food - Caterer</option>
+          <option value="customer">Customer</option>
+          <option value="caterer">Caterer</option>
         </select>
 
         <input
