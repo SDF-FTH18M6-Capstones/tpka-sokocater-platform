@@ -29,8 +29,13 @@ async function handleRes(res) {
   return data;
 }
 
-export async function getCaterers() {
-  const res = await fetch(`${API_URL}/caterers`, {
+export async function getCaterers(params = {}) {
+  const query = new URLSearchParams();
+  if (params.min_price) query.append("min_price", params.min_price);
+  if (params.max_price) query.append("max_price", params.max_price);
+  if (params.category) query.append("category", params.category);
+  const qs = query.toString() ? "?" + query.toString() : "";
+  const res = await fetch(API_URL + "/caterers" + qs, {
     headers: authHeaders(),
   });
 

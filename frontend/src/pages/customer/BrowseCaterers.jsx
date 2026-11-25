@@ -8,6 +8,9 @@ function BrowseCaterers() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
+  const [minPrice, setMinPrice] = useState("");
+  const [maxPrice, setMaxPrice] = useState("");
+  const [priceError, setPriceError] = useState("");
 
   const [selectedIds, setSelectedIds] = useState([]);
   const [comparisonData, setComparisonData] = useState([]);
@@ -21,7 +24,7 @@ function BrowseCaterers() {
 
     async function loadCaterers() {
       try {
-        const response = await getCaterers();
+        const response = await getCaterers({ min_price: minPrice, max_price: maxPrice });
 
         if (isActive) {
           setCaterers(response.data || []);
@@ -47,7 +50,7 @@ function BrowseCaterers() {
       isActive = false;
       clearInterval(intervalId);
     };
-  }, []);
+  }, [minPrice, maxPrice]);
 
   // Search caterers
   const filteredCaterers = caterers.filter((caterer) => {
@@ -179,6 +182,14 @@ function BrowseCaterers() {
             aria-label="Search caterers"
           />
         </div>
+
+        {/* Price Filter */}
+        <div className="caterer-search" style={{ display: "flex", gap: "10px", flexWrap: "wrap", marginTop: "10px" }}>
+          <input type="number" min="0" placeholder="Min Price per Guest" value={minPrice} onChange={(e) => setMinPrice(e.target.value)} />
+          <input type="number" min="0" placeholder="Max Price per Guest" value={maxPrice} onChange={(e) => setMaxPrice(e.target.value)} />
+          <button type="button" onClick={() => { setMinPrice(""); setMaxPrice(""); setPriceError(""); }}>Clear</button>
+        </div>
+        {priceError && <p style={{ color: "red" }}>{priceError}</p>}
 
         {loading && <p>Loading caterers...</p>}
 
