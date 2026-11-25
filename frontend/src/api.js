@@ -172,3 +172,101 @@ export async function deleteMenuItem(id) {
   const res = await fetch(`${API_URL}/menu-items/${id}`, { method: "DELETE", headers: authHeaders() });
   return handleRes(res);
 }
+
+// ============================================================
+// PAYMENTS - matches backend/routes/payment_routes.py
+// ============================================================
+
+export async function createPayment(booking_id, payment_method) {
+  const res = await fetch(`${API_URL}/payments`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify({ booking_id, payment_method }),
+  });
+  return handleRes(res);
+}
+
+export async function getPayments() {
+  const res = await fetch(`${API_URL}/payments`, {
+    headers: authHeaders(),
+  });
+  return handleRes(res);
+}
+
+export async function getPayment(id) {
+  const res = await fetch(`${API_URL}/payments/${id}`, {
+    headers: authHeaders(),
+  });
+  return handleRes(res);
+}
+
+export async function simulatePayment(id, result) {
+  const res = await fetch(`${API_URL}/payments/${id}/simulate`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify({ result }),
+  });
+  return handleRes(res);
+}
+
+// ============================================================
+// REVIEWS - matches backend/routes/review_routes.py
+// ============================================================
+
+export async function createReview(booking_id, rating, comment) {
+  // Exactly { booking_id, rating, comment } - no extra keys
+  // booking_id: int > 0, rating: int 1-5, comment: string or null
+  // Only works if booking.status === "completed", else 400
+  // 409 if booking already reviewed
+  const res = await fetch(`${API_URL}/reviews`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify({ booking_id, rating, comment: comment || null }),
+  });
+  return handleRes(res);
+}
+
+export async function getCatererReviews(caterer_id) {
+  const res = await fetch(`${API_URL}/caterers/${caterer_id}/reviews`, {
+    headers: authHeaders(),
+  });
+  return handleRes(res);
+}
+
+// ============================================================
+// NOTIFICATIONS - matches backend/routes/notification_routes.py
+// ============================================================
+
+export async function getNotifications() {
+  const res = await fetch(`${API_URL}/notifications`, {
+    headers: authHeaders(),
+  });
+  return handleRes(res);
+}
+
+export async function getNotification(id) {
+  const res = await fetch(`${API_URL}/notifications/${id}`, {
+    headers: authHeaders(),
+  });
+  return handleRes(res);
+}
+
+export async function markNotificationRead(id) {
+  // PATCH, no body
+  const res = await fetch(`${API_URL}/notifications/${id}/read`, {
+    method: "PATCH",
+    headers: authHeaders(),
+  });
+  return handleRes(res);
+}
+
+export async function markAllNotificationsRead() {
+  // PATCH, no body - must be called before /:id/read route conflicts
+  // Note: backend has /read-all AFTER /<id>/read, so "read-all" would 404 as id
+  // If this 404s, call markNotificationRead() in a loop instead
+  const res = await fetch(`${API_URL}/notifications/read-all`, {
+    method: "PATCH",
+    headers: authHeaders(),
+  });
+  return handleRes(res);
+}

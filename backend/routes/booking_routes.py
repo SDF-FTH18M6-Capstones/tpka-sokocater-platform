@@ -134,13 +134,19 @@ def validate_booking_availability(
     if event_start_time >= event_end_time:
         return "Event start time must be before event end time."
 
-    available_slot = Availability.query.filter(
+    # Fetch by date + status only - do time comparison in Python
+    # because SQLite Time comparisons in SQL are unreliable here
+    slots = Availability.query.filter(
         Availability.caterer_id == caterer_id,
         Availability.available_date == event_date,
         Availability.status == "available",
-        Availability.start_time <= event_start_time,
-        Availability.end_time >= event_end_time
-    ).first()
+    ).all()
+
+    available_slot = None
+    for slot in slots:
+        if slot.start_time <= event_start_time and slot.end_time >= event_end_time:
+            available_slot = slot
+            break
 
     if not available_slot:
         return (
@@ -166,10 +172,8 @@ def validate_booking_availability(
             existing_booking.event_start_time is None
             or existing_booking.event_end_time is None
         ):
-            return (
-                "The caterer already has an active booking "
-                "on the selected date."
-            )
+            # Don't block whole day for legacy bookings with no times
+            continue
 
         overlaps = (
             existing_booking.event_start_time < event_end_time
